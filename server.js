@@ -45,7 +45,7 @@ const avatarUpload = multer({
 app.get('/api/users/:username', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, username, display_name, avatar_url, created_at FROM users WHERE username = $1',
+      'SELECT id, username, display_name, avatar_url, created_at, (email IS NOT NULL) AS has_email FROM users WHERE username = $1',
       [req.params.username]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
@@ -56,17 +56,56 @@ app.get('/api/users/:username', async (req, res) => {
   }
 });
 
+// Verify email for an existing account (or set it if the account has none yet)
+app.post('/api/users/verify', async (req, res) => {
+  try {
+    const { username, email } = req.body;
+    if (!username || !email) return res.status(400).json({ error: 'username and email required' });
+    const trimmedEmail = email.trim().toLowerCase();
+    const result = await pool.query(
+      'SELECT id, username, display_name, avatar_url, email FROM users WHERE username = $1',
+      [username.trim().toLowerCase()]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    const user = result.rows[0];
+    if (user.email === null) {
+      // First time — associate this email with the account
+      try {
+        const updated = await pool.query(
+          'UPDATE users SET email = $1 WHERE username = $2 RETURNING id, username, display_name, avatar_url, created_at',
+          [trimmedEmail, username.trim().toLowerCase()]
+        );
+        return res.json(updated.rows[0]);
+      } catch (err) {
+        if (err.code === '23505') return res.status(409).json({ error: 'Email already in use' });
+        throw err;
+      }
+    }
+    if (user.email !== trimmedEmail) return res.status(401).json({ error: 'Email does not match' });
+    const { email: _removed, ...safe } = user;
+    res.json(safe);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 app.post('/api/users', async (req, res) => {
   try {
-    const { username, display_name } = req.body;
-    if (!username || !display_name) return res.status(400).json({ error: 'username and display_name required' });
+    const { username, display_name, email } = req.body;
+    if (!username || !display_name || !email) return res.status(400).json({ error: 'username, display_name, and email are required' });
+    const trimmedEmail = email.trim().toLowerCase();
     const result = await pool.query(
-      'INSERT INTO users (username, display_name) VALUES ($1, $2) RETURNING id, username, display_name, avatar_url, created_at',
-      [username.trim().toLowerCase(), display_name.trim()]
+      'INSERT INTO users (username, display_name, email) VALUES ($1, $2, $3) RETURNING id, username, display_name, avatar_url, created_at',
+      [username.trim().toLowerCase(), display_name.trim(), trimmedEmail]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    if (err.code === '23505') return res.status(409).json({ error: 'Username already taken' });
+    if (err.code === '23505') {
+      const detail = err.detail || '';
+      const message = detail.includes('email') ? 'Email already in use' : 'Username already taken';
+      return res.status(409).json({ error: message });
+    }
     console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
