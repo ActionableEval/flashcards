@@ -1,22 +1,51 @@
 import express from 'express';
 import { Pool } from 'pg';
 import cors from 'cors';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = 3001;
 
 app.use(cors());
 app.use(express.json());
 
+// Serve uploaded avatars statically
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+// ─── Multer setup ─────────────────────────────────────────────────
+const avatarStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(__dirname, 'uploads', 'avatars');
+    fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
+    cb(null, `${req.params.username}_${Date.now()}${ext}`);
+  },
+});
+
+const avatarUpload = multer({
+  storage: avatarStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  fileFilter: (req, file, cb) => {
+    if (/^image\//.test(file.mimetype)) cb(null, true);
+    else cb(new Error('Only image files are allowed'));
+  },
+});
 
 // ─── Users ────────────────────────────────────────────────────────
 
-// Get user by username
 app.get('/api/users/:username', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, username, display_name, created_at FROM users WHERE username = $1',
+      'SELECT id, username, display_name, avatar_url, created_at FROM users WHERE username = $1',
       [req.params.username]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
@@ -27,13 +56,12 @@ app.get('/api/users/:username', async (req, res) => {
   }
 });
 
-// Create user
 app.post('/api/users', async (req, res) => {
   try {
     const { username, display_name } = req.body;
     if (!username || !display_name) return res.status(400).json({ error: 'username and display_name required' });
     const result = await pool.query(
-      'INSERT INTO users (username, display_name) VALUES ($1, $2) RETURNING id, username, display_name, created_at',
+      'INSERT INTO users (username, display_name) VALUES ($1, $2) RETURNING id, username, display_name, avatar_url, created_at',
       [username.trim().toLowerCase(), display_name.trim()]
     );
     res.status(201).json(result.rows[0]);
@@ -44,9 +72,58 @@ app.post('/api/users', async (req, res) => {
   }
 });
 
+// Update display name and/or avatar_url (for emoji avatars)
+app.put('/api/users/:username', async (req, res) => {
+  try {
+    const { display_name, avatar_url } = req.body;
+    if (!display_name || !display_name.trim()) return res.status(400).json({ error: 'display_name is required' });
+
+    let result;
+    if (avatar_url !== undefined) {
+      result = await pool.query(
+        'UPDATE users SET display_name = $1, avatar_url = $2 WHERE username = $3 RETURNING id, username, display_name, avatar_url, created_at',
+        [display_name.trim(), avatar_url, req.params.username]
+      );
+    } else {
+      result = await pool.query(
+        'UPDATE users SET display_name = $1 WHERE username = $2 RETURNING id, username, display_name, avatar_url, created_at',
+        [display_name.trim(), req.params.username]
+      );
+    }
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Upload avatar
+app.post('/api/users/:username/avatar', avatarUpload.single('avatar'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+
+    // Delete old avatar file if it exists
+    const old = await pool.query('SELECT avatar_url FROM users WHERE username = $1', [req.params.username]);
+    if (old.rows.length && old.rows[0].avatar_url) {
+      const oldPath = path.join(__dirname, old.rows[0].avatar_url);
+      fs.unlink(oldPath, () => {});
+    }
+
+    const result = await pool.query(
+      'UPDATE users SET avatar_url = $1 WHERE username = $2 RETURNING id, username, display_name, avatar_url',
+      [avatarUrl, req.params.username]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ─── Teams ────────────────────────────────────────────────────────
 
-// List all teams
 app.get('/api/teams', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -63,14 +140,13 @@ app.get('/api/teams', async (req, res) => {
   }
 });
 
-// Get single team with members
 app.get('/api/teams/:teamId', async (req, res) => {
   try {
     const teamId = parseInt(req.params.teamId);
     const [teamRes, membersRes] = await Promise.all([
       pool.query('SELECT id, name, description, created_at FROM teams WHERE id = $1', [teamId]),
       pool.query(`
-        SELECT u.id, u.username, u.display_name, tm.role, tm.status, tm.joined_at
+        SELECT u.id, u.username, u.display_name, u.avatar_url, tm.role, tm.status, tm.joined_at
         FROM team_members tm JOIN users u ON u.id = tm.user_id
         WHERE tm.team_id = $1 ORDER BY tm.role, u.display_name
       `, [teamId]),
@@ -83,14 +159,12 @@ app.get('/api/teams/:teamId', async (req, res) => {
   }
 });
 
-// Get teams for a user
 app.get('/api/users/:userId/teams', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT t.id, t.name, t.description, tm.role, tm.status
       FROM team_members tm JOIN teams t ON t.id = tm.team_id
-      WHERE tm.user_id = $1
-      ORDER BY t.name
+      WHERE tm.user_id = $1 ORDER BY t.name
     `, [req.params.userId]);
     res.json(result.rows);
   } catch (err) {
@@ -99,7 +173,6 @@ app.get('/api/users/:userId/teams', async (req, res) => {
   }
 });
 
-// Create team (creator becomes owner)
 app.post('/api/teams', async (req, res) => {
   const client = await pool.connect();
   try {
@@ -129,7 +202,6 @@ app.post('/api/teams', async (req, res) => {
 
 // ─── Team Membership ──────────────────────────────────────────────
 
-// Request to join a team
 app.post('/api/teams/:teamId/join', async (req, res) => {
   try {
     const { user_id } = req.body;
@@ -145,29 +217,21 @@ app.post('/api/teams/:teamId/join', async (req, res) => {
   }
 });
 
-// Directly add a member (owner/manager only) — immediately approved
 app.post('/api/teams/:teamId/add', async (req, res) => {
   try {
     const { requester_id, username } = req.body;
     const teamId = parseInt(req.params.teamId);
-
-    // Check requester is owner or manager
     const reqCheck = await pool.query(
       "SELECT role FROM team_members WHERE team_id = $1 AND user_id = $2 AND status = 'approved'",
       [teamId, requester_id]
     );
-    if (!reqCheck.rows.length || !['owner', 'manager'].includes(reqCheck.rows[0].role)) {
+    if (!reqCheck.rows.length || !['owner', 'manager'].includes(reqCheck.rows[0].role))
       return res.status(403).json({ error: 'Not authorized' });
-    }
-
-    // Find target user
     const userRes = await pool.query('SELECT id FROM users WHERE username = $1', [username.trim().toLowerCase()]);
     if (!userRes.rows.length) return res.status(404).json({ error: 'User not found' });
-    const targetId = userRes.rows[0].id;
-
     await pool.query(
       "INSERT INTO team_members (team_id, user_id, role, status) VALUES ($1, $2, 'member', 'approved') ON CONFLICT (team_id, user_id) DO UPDATE SET status = 'approved'",
-      [teamId, targetId]
+      [teamId, userRes.rows[0].id]
     );
     res.json({ success: true });
   } catch (err) {
@@ -176,24 +240,17 @@ app.post('/api/teams/:teamId/add', async (req, res) => {
   }
 });
 
-// Approve a pending join request (owner/manager only)
 app.post('/api/teams/:teamId/members/:userId/approve', async (req, res) => {
   try {
     const { requester_id } = req.body;
     const { teamId, userId } = req.params;
-
     const reqCheck = await pool.query(
       "SELECT role FROM team_members WHERE team_id = $1 AND user_id = $2 AND status = 'approved'",
       [teamId, requester_id]
     );
-    if (!reqCheck.rows.length || !['owner', 'manager'].includes(reqCheck.rows[0].role)) {
+    if (!reqCheck.rows.length || !['owner', 'manager'].includes(reqCheck.rows[0].role))
       return res.status(403).json({ error: 'Not authorized' });
-    }
-
-    await pool.query(
-      "UPDATE team_members SET status = 'approved' WHERE team_id = $1 AND user_id = $2",
-      [teamId, userId]
-    );
+    await pool.query("UPDATE team_members SET status = 'approved' WHERE team_id = $1 AND user_id = $2", [teamId, userId]);
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -201,29 +258,19 @@ app.post('/api/teams/:teamId/members/:userId/approve', async (req, res) => {
   }
 });
 
-// Change a member's role (owner only)
 app.put('/api/teams/:teamId/members/:userId/role', async (req, res) => {
   try {
     const { requester_id, role } = req.body;
     const { teamId, userId } = req.params;
-
     if (!['manager', 'member'].includes(role)) return res.status(400).json({ error: 'Role must be manager or member' });
-
     const reqCheck = await pool.query(
       "SELECT role FROM team_members WHERE team_id = $1 AND user_id = $2 AND status = 'approved'",
       [teamId, requester_id]
     );
-    if (!reqCheck.rows.length || reqCheck.rows[0].role !== 'owner') {
+    if (!reqCheck.rows.length || reqCheck.rows[0].role !== 'owner')
       return res.status(403).json({ error: 'Only the owner can change roles' });
-    }
-
-    // Cannot change owner's own role
     if (String(userId) === String(requester_id)) return res.status(400).json({ error: 'Cannot change your own role' });
-
-    await pool.query(
-      'UPDATE team_members SET role = $1 WHERE team_id = $2 AND user_id = $3',
-      [role, teamId, userId]
-    );
+    await pool.query('UPDATE team_members SET role = $1 WHERE team_id = $2 AND user_id = $3', [role, teamId, userId]);
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -231,32 +278,22 @@ app.put('/api/teams/:teamId/members/:userId/role', async (req, res) => {
   }
 });
 
-// Remove a member (owner/manager, or member leaving themselves)
 app.delete('/api/teams/:teamId/members/:userId', async (req, res) => {
   try {
     const { requester_id } = req.body;
     const { teamId, userId } = req.params;
-
     const isSelf = String(requester_id) === String(userId);
-
     if (!isSelf) {
       const reqCheck = await pool.query(
         "SELECT role FROM team_members WHERE team_id = $1 AND user_id = $2 AND status = 'approved'",
         [teamId, requester_id]
       );
-      if (!reqCheck.rows.length || !['owner', 'manager'].includes(reqCheck.rows[0].role)) {
+      if (!reqCheck.rows.length || !['owner', 'manager'].includes(reqCheck.rows[0].role))
         return res.status(403).json({ error: 'Not authorized' });
-      }
-      // Managers cannot remove other managers or owner
-      const targetCheck = await pool.query(
-        'SELECT role FROM team_members WHERE team_id = $1 AND user_id = $2',
-        [teamId, userId]
-      );
-      if (targetCheck.rows.length && ['owner', 'manager'].includes(targetCheck.rows[0].role) && reqCheck.rows[0].role === 'manager') {
+      const targetCheck = await pool.query('SELECT role FROM team_members WHERE team_id = $1 AND user_id = $2', [teamId, userId]);
+      if (targetCheck.rows.length && ['owner', 'manager'].includes(targetCheck.rows[0].role) && reqCheck.rows[0].role === 'manager')
         return res.status(403).json({ error: 'Managers cannot remove owners or other managers' });
-      }
     }
-
     await pool.query('DELETE FROM team_members WHERE team_id = $1 AND user_id = $2', [teamId, userId]);
     res.json({ success: true });
   } catch (err) {
@@ -275,7 +312,6 @@ app.get('/api/mastered/:kid', async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: 'Failed to fetch mastered cards' });
   }
 });
@@ -290,7 +326,6 @@ app.post('/api/mastered', async (req, res) => {
     );
     res.json({ success: true });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: 'Failed to save mastered card' });
   }
 });
@@ -306,7 +341,6 @@ app.delete('/api/mastered', async (req, res) => {
     }
     res.json({ success: true });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: 'Failed to delete mastered card' });
   }
 });
@@ -321,7 +355,6 @@ app.get('/api/lessons/:kid', async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: 'Failed to fetch completed lessons' });
   }
 });
@@ -337,7 +370,6 @@ app.post('/api/lessons', async (req, res) => {
     );
     res.json({ success: true });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: 'Failed to save completed lesson' });
   }
 });
@@ -353,7 +385,6 @@ app.delete('/api/lessons', async (req, res) => {
     }
     res.json({ success: true });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: 'Failed to delete completed lesson' });
   }
 });
@@ -368,7 +399,6 @@ app.get('/api/progress/:kid', async (req, res) => {
     ]);
     res.json({ masteredCards: mastered.rows, completedLessons: lessons.rows });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: 'Failed to fetch progress' });
   }
 });

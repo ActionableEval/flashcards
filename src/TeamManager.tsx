@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { X, Shield, UserPlus, Check, Trash2, ChevronDown, Loader, Crown, User } from 'lucide-react';
+import { Avatar } from './ProfileEditor';
 
 interface UserData {
   id: number;
   username: string;
   display_name: string;
+  avatar_url?: string | null;
 }
 
 interface Member {
   id: number;
   username: string;
   display_name: string;
+  avatar_url?: string | null;
   role: string;
   status: string;
   joined_at: string;
@@ -216,9 +219,12 @@ export default function TeamManager({ user, team, onClose, onLeave }: Props) {
               <div className="space-y-2">
                 {pending.map(m => (
                   <div key={m.id} className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-                    <div>
-                      <p className="font-medium text-slate-800 text-sm">{m.display_name}</p>
-                      <p className="text-xs text-slate-500">@{m.username}</p>
+                    <div className="flex items-center gap-2">
+                      <Avatar user={m} size="sm" />
+                      <div>
+                        <p className="font-medium text-slate-800 text-sm">{m.display_name}</p>
+                        <p className="text-xs text-slate-500">@{m.username}</p>
+                      </div>
                     </div>
                     <div className="flex gap-2">
                       <button
@@ -257,11 +263,14 @@ export default function TeamManager({ user, team, onClose, onLeave }: Props) {
                   const canRemove = isMe || (canManage && m.role !== 'owner' && !(myRole === 'manager' && m.role === 'manager'));
                   return (
                     <div key={m.id} className={`flex items-center justify-between rounded-xl px-3 py-2.5 border ${isMe ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-slate-100'}`}>
-                      <div>
-                        <p className="font-medium text-slate-800 text-sm">
-                          {m.display_name} {isMe && <span className="text-xs text-indigo-500">(you)</span>}
-                        </p>
-                        <p className="text-xs text-slate-400">@{m.username}</p>
+                      <div className="flex items-center gap-2">
+                        <Avatar user={m} size="sm" />
+                        <div>
+                          <p className="font-medium text-slate-800 text-sm">
+                            {m.display_name} {isMe && <span className="text-xs text-indigo-500">(you)</span>}
+                          </p>
+                          <p className="text-xs text-slate-400">@{m.username}</p>
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
                         {canChangeRole ? (

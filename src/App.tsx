@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, RotateCcw, Shuffle, Star, Coffee, Plus, X, Check, AlertCircle, CheckCircle, User, Link, Copy, Trophy, Clock, Users, LogOut, Settings } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RotateCcw, Shuffle, Star, Coffee, Plus, X, Check, AlertCircle, CheckCircle, User, Link, Copy, Trophy, Clock, Users, LogOut, Settings, Pencil } from 'lucide-react';
 import UserLogin from './UserLogin';
 import TeamSelector from './TeamSelector';
 import TeamManager from './TeamManager';
+import ProfileEditor, { Avatar } from './ProfileEditor';
 
 interface UserData {
   id: number;
   username: string;
   display_name: string;
+  avatar_url?: string | null;
 }
 
 interface Team {
@@ -25,6 +27,7 @@ const ChineseFoodFlashcards = () => {
   const [currentUser, setCurrentUser] = useState<UserData | null>(null);
   const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
   const [showTeamManager, setShowTeamManager] = useState(false);
+  const [showProfileEditor, setShowProfileEditor] = useState(false);
 
   // ─── Flashcard state ──────────────────────────────────────────────
   const [selectedUnit, setSelectedUnit] = useState('');
@@ -468,9 +471,7 @@ const ChineseFoodFlashcards = () => {
                 onClick={() => setShowUserMenu(s => !s)}
                 className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 hover:bg-slate-50 shadow-sm"
               >
-                <div className="w-6 h-6 bg-gradient-to-br from-indigo-400 to-purple-500 rounded-full flex items-center justify-center">
-                  <User className="w-3.5 h-3.5 text-white" />
-                </div>
+                {currentUser && <Avatar user={currentUser} size="sm" />}
                 <span className="text-sm font-medium text-slate-700">{currentUser?.display_name}</span>
                 {currentTeam && (
                   <span className="text-xs bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-full">{currentTeam.name}</span>
@@ -478,14 +479,26 @@ const ChineseFoodFlashcards = () => {
               </button>
 
               {showUserMenu && (
-                <div className="absolute right-0 mt-2 w-52 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden">
-                  <div className="px-3 py-2 border-b border-slate-100">
-                    <p className="text-sm font-semibold text-slate-800">{currentUser?.display_name}</p>
-                    <p className="text-xs text-slate-400">@{currentUser?.username}</p>
+                <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden">
+                  <div className="px-3 py-2.5 border-b border-slate-100 flex items-center gap-2">
+                    {currentUser && <Avatar user={currentUser} size="sm" />}
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">{currentUser?.display_name}</p>
+                      <p className="text-xs text-slate-400">@{currentUser?.username}</p>
+                    </div>
                   </div>
 
+                  {/* Edit profile */}
+                  <button
+                    onClick={() => { setShowProfileEditor(true); setShowUserMenu(false); }}
+                    className="w-full text-left px-3 py-2.5 hover:bg-slate-50 flex items-center gap-2 text-sm text-slate-700"
+                  >
+                    <Pencil className="w-4 h-4 text-rose-400" />
+                    Edit Profile
+                  </button>
+
                   {/* Unit selector */}
-                  <div className="px-3 py-2 border-b border-slate-100">
+                  <div className="px-3 py-2 border-t border-b border-slate-100">
                     <p className="text-xs text-slate-500 mb-1 font-medium">Unit</p>
                     <select
                       value={selectedUnit}
@@ -745,6 +758,15 @@ const ChineseFoodFlashcards = () => {
           team={currentTeam}
           onClose={() => setShowTeamManager(false)}
           onLeave={handleTeamLeave}
+        />
+      )}
+
+      {/* Profile Editor Modal */}
+      {showProfileEditor && currentUser && (
+        <ProfileEditor
+          user={currentUser}
+          onClose={() => setShowProfileEditor(false)}
+          onUpdate={(updated) => setCurrentUser(updated)}
         />
       )}
     </div>
