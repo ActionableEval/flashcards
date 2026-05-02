@@ -43,7 +43,7 @@ interface MasteredCard {
 interface TeamRecord {
   unit_number: string;
   unit_name: string;
-  time_ms: number;
+  time_ms: number | null;
   display_name: string;
   avatar_url: string | null;
   username: string;
@@ -388,7 +388,7 @@ export default function Dashboard({
             </div>
           ) : unitsWithTeamRecords.length === 0 ? (
             <div className="bg-white border border-slate-200 rounded-2xl shadow-sm px-4 py-6 text-center text-slate-400 text-sm">
-              No timed records yet for <span className="font-medium text-slate-600">{selectedTeam?.name}</span> — complete a lesson in Timed Game mode to set one!
+              No completed lessons yet for <span className="font-medium text-slate-600">{selectedTeam?.name}</span> — study a unit to see records here!
             </div>
           ) : (
             <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
@@ -410,7 +410,7 @@ export default function Dashboard({
                             <Avatar user={r} size="sm" />
                             <div>
                               <p className="text-xs font-semibold text-slate-700 leading-tight">{r.display_name}</p>
-                              <p className="text-xs font-mono text-slate-400">{formatMs(r.time_ms)}</p>
+                              <p className="text-xs font-mono text-slate-400">{r.time_ms != null ? formatMs(r.time_ms) : '✓ done'}</p>
                             </div>
                           </div>
                         ))}

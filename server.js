@@ -460,11 +460,11 @@ app.get('/api/teams/:teamId/lesson-records', async (req, res) => {
         SELECT
           cl.unit_number, cl.unit_name, cl.time_ms,
           u.display_name, u.avatar_url, u.username,
-          ROW_NUMBER() OVER (PARTITION BY cl.unit_number ORDER BY cl.time_ms ASC) AS rn
+          ROW_NUMBER() OVER (PARTITION BY cl.unit_number ORDER BY cl.time_ms ASC NULLS LAST) AS rn
         FROM completed_lessons cl
         JOIN users u ON u.username = cl.kid
         JOIN team_members tm ON tm.user_id = u.id
-        WHERE tm.team_id = $1 AND tm.status = 'approved' AND cl.time_ms IS NOT NULL
+        WHERE tm.team_id = $1 AND tm.status = 'approved'
       )
       SELECT * FROM ranked WHERE rn <= 2
       ORDER BY unit_number, rn
