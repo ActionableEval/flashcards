@@ -85,28 +85,54 @@ const ChineseFoodFlashcards = () => {
     });
   }
 
+  const CACHE_KEY = 'flashcards_csv_cache';
+  const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+  const mapRows = (rows: Record<string, string>[]) =>
+    rows
+      .filter(r => r.simplified || r.english)
+      .map(r => ({
+        simplified: r.simplified || '',
+        traditional: r.traditional || r.simplified || '',
+        pinyin: r.pinyin || '',
+        english: r.english || '',
+        unitNumber: r.unitNumber || '',
+        unitName: r.unitName || '',
+      }));
+
   useEffect(() => {
     let cancelled = false;
+
+    // Load from cache immediately so the dashboard shows right away
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (raw) {
+        const { ts, data } = JSON.parse(raw);
+        if (data?.length && !cancelled) {
+          setAllCards(data);
+          setCards(data);
+        }
+        // If cache is fresh enough, skip the network fetch
+        if (Date.now() - ts < CACHE_TTL_MS) return;
+      }
+    } catch {}
+
+    // Fetch fresh data in the background (or on first load)
     (async () => {
       try {
         const res = await fetch(SHEET_CSV_URL);
         const text = await res.text();
-        const rows = parseCsv(text);
-        const mapped = rows
-          .filter(r => r.simplified || r.english)
-          .map(r => ({
-            simplified: r.simplified || '',
-            traditional: r.traditional || r.simplified || '',
-            pinyin: r.pinyin || '',
-            english: r.english || '',
-            unitNumber: r.unitNumber || '',
-            unitName: r.unitName || '',
-          }));
-        if (!cancelled) { setAllCards(mapped); setCards(mapped); }
+        const mapped = mapRows(parseCsv(text));
+        if (!cancelled) {
+          setAllCards(mapped);
+          setCards(mapped);
+          try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: mapped })); } catch {}
+        }
       } catch (e) {
         console.error('Failed to load Google Sheet CSV:', e);
       }
     })();
+
     return () => { cancelled = true; };
   }, []);
 
