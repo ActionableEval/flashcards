@@ -636,8 +636,21 @@ const ChineseFoodFlashcards = () => {
                 <div className="text-white text-6xl font-bold">{countdown}</div>
               </div>
             )}
+            {selectedUnit && completedLessons.includes(selectedUnit) && finalTimeMs === null && (
+              <div className="absolute inset-0 bg-emerald-600/90 z-20 flex flex-col items-center justify-center rounded-3xl gap-3 p-6" onClick={e => e.stopPropagation()}>
+                <div className="text-5xl">🏆</div>
+                <p className="text-white font-bold text-xl">Lesson Complete!</p>
+                <p className="text-emerald-100 text-sm">All cards mastered</p>
+                <button
+                  onClick={() => setScreen('dashboard')}
+                  className="flex items-center gap-2 bg-white text-emerald-700 font-bold px-6 py-3 rounded-2xl shadow-lg hover:bg-emerald-50 transition-colors text-sm mt-2"
+                >
+                  <LayoutDashboard className="w-4 h-4" /> Back to Dashboard
+                </button>
+              </div>
+            )}
             {finalTimeMs !== null && !isGameMode && (
-              <div className="absolute inset-0 bg-black/60 z-20 flex flex-col items-center justify-center rounded-3xl gap-4 p-6">
+              <div className="absolute inset-0 bg-black/60 z-20 flex flex-col items-center justify-center rounded-3xl gap-4 p-6" onClick={e => e.stopPropagation()}>
                 <div className="text-5xl">🎉</div>
                 <div className="text-white text-3xl font-bold">{formatMs(finalTimeMs)}</div>
                 <p className="text-white/80 text-sm">Lesson complete!</p>
@@ -730,23 +743,6 @@ const ChineseFoodFlashcards = () => {
             <CheckCircle className="w-4 h-4" /> Mastered
           </button>
         </div>
-
-        {/* Lesson complete banner (non-timed mode) */}
-        {selectedUnit && completedLessons.includes(selectedUnit) && finalTimeMs === null && (
-          <div className="max-w-md mx-auto mb-4 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl shadow-lg p-4 flex flex-col items-center gap-3 text-white text-center">
-            <div className="text-3xl">🏆</div>
-            <div>
-              <p className="font-bold text-base">Lesson Complete!</p>
-              <p className="text-emerald-100 text-xs mt-0.5">All cards mastered for this unit</p>
-            </div>
-            <button
-              onClick={() => setScreen('dashboard')}
-              className="flex items-center gap-2 bg-white text-emerald-700 font-bold px-5 py-2.5 rounded-xl shadow hover:bg-emerald-50 transition-colors text-sm w-full justify-center"
-            >
-              <LayoutDashboard className="w-4 h-4" /> Back to Dashboard
-            </button>
-          </div>
-        )}
 
         {/* Notification */}
         {error && (
