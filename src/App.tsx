@@ -46,6 +46,7 @@ const ChineseFoodFlashcards = () => {
   // Mastery & lesson tracking
   const [masteredKeys, setMasteredKeys] = useState<string[]>([]);
   const [completedLessons, setCompletedLessons] = useState<string[]>([]);
+  const [overlayDismissed, setOverlayDismissed] = useState(false);
 
   // User/unit menu
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -185,6 +186,7 @@ const ChineseFoodFlashcards = () => {
     setIsGameMode(false);
     setGameOrder([]);
     setFinalTimeMs(null);
+    setOverlayDismissed(false);
     setScreen('app');
   };
 
@@ -636,7 +638,7 @@ const ChineseFoodFlashcards = () => {
                 <div className="text-white text-6xl font-bold">{countdown}</div>
               </div>
             )}
-            {selectedUnit && completedLessons.includes(selectedUnit) && finalTimeMs === null && (
+            {selectedUnit && completedLessons.includes(selectedUnit) && finalTimeMs === null && !overlayDismissed && (
               <div className="absolute inset-0 bg-emerald-600/90 z-20 flex flex-col items-center justify-center rounded-3xl gap-3 p-6" onClick={e => e.stopPropagation()}>
                 <div className="text-5xl">🏆</div>
                 <p className="text-white font-bold text-xl">Lesson Complete!</p>
@@ -649,7 +651,7 @@ const ChineseFoodFlashcards = () => {
                     <LayoutDashboard className="w-4 h-4" /> Back to Dashboard
                   </button>
                   <button
-                    onClick={resetCards}
+                    onClick={() => { setOverlayDismissed(true); resetCards(); }}
                     className="flex items-center justify-center gap-2 bg-emerald-500/60 hover:bg-emerald-500/80 text-white font-semibold px-6 py-2.5 rounded-2xl transition-colors text-sm w-full"
                   >
                     <RotateCcw className="w-4 h-4" /> Restart
@@ -657,7 +659,7 @@ const ChineseFoodFlashcards = () => {
                 </div>
               </div>
             )}
-            {finalTimeMs !== null && !isGameMode && (
+            {finalTimeMs !== null && !isGameMode && !overlayDismissed && (
               <div className="absolute inset-0 bg-black/60 z-20 flex flex-col items-center justify-center rounded-3xl gap-3 p-6" onClick={e => e.stopPropagation()}>
                 <div className="text-5xl">🎉</div>
                 <div className="text-white text-3xl font-bold">{formatMs(finalTimeMs)}</div>
@@ -670,7 +672,7 @@ const ChineseFoodFlashcards = () => {
                     <LayoutDashboard className="w-4 h-4" /> Back to Dashboard
                   </button>
                   <button
-                    onClick={resetCards}
+                    onClick={() => { setOverlayDismissed(true); resetCards(); }}
                     className="flex items-center justify-center gap-2 bg-white/20 hover:bg-white/30 text-white font-semibold px-6 py-2.5 rounded-2xl transition-colors text-sm w-full"
                   >
                     <RotateCcw className="w-4 h-4" /> Restart
