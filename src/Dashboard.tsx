@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Search, Trophy, BookOpen, Check, ChevronRight,
-  Users, LogOut, Coffee, X, Play, Layers, CheckCircle2,
-  Circle, BarChart2,
+  Search, Trophy, BookOpen, Check, ChevronRight, ChevronDown,
+  Users, LogOut, Coffee, X, Play, Plus, CheckCircle2,
+  Circle, BarChart2, Loader, Shield,
 } from 'lucide-react';
 import { Avatar } from './ProfileEditor';
 
@@ -62,12 +62,12 @@ interface LessonStats {
 
 interface Props {
   user: UserData;
-  team: Team | null;
+  userTeams: Team[];
   allCards: Card[];
   onStartLesson: (units: string[], label: string) => void;
   onEditProfile: () => void;
-  onSwitchTeam: () => void;
-  onManageTeam: () => void;
+  onManageTeam: (team: Team) => void;
+  onTeamsChange: (teams: Team[]) => void;
   onLogout: () => void;
 }
 
@@ -79,8 +79,8 @@ function formatMs(ms: number) {
 }
 
 export default function Dashboard({
-  user, team, allCards,
-  onStartLesson, onEditProfile, onSwitchTeam, onManageTeam, onLogout,
+  user, userTeams, allCards,
+  onStartLesson, onEditProfile, onManageTeam, onTeamsChange, onLogout,
 }: Props) {
   const [search, setSearch] = useState('');
   const [masteredCards, setMasteredCards] = useState<MasteredCard[]>([]);
@@ -89,23 +89,32 @@ export default function Dashboard({
   const [loading, setLoading] = useState(true);
   const [selectedUnits, setSelectedUnits] = useState<Set<string>>(new Set());
   const [termsLesson, setTermsLesson] = useState<string | null>(null);
+  const [selectedTeamId, setSelectedTeamId] = useState<number | null>(
+    userTeams.length > 0 ? userTeams[0].id : null
+  );
+  // Team join/create panel
+  const [showTeamPanel, setShowTeamPanel] = useState(false);
+  const [allAvailableTeams, setAllAvailableTeams] = useState<any[]>([]);
+  const [teamPanelLoading, setTeamPanelLoading] = useState(false);
+  const [teamSearch, setTeamSearch] = useState('');
+  const [showCreateTeam, setShowCreateTeam] = useState(false);
+  const [newTeamName, setNewTeamName] = useState('');
+  const [newTeamDesc, setNewTeamDesc] = useState('');
+  const [teamError, setTeamError] = useState('');
+  const [teamSuccess, setTeamSuccess] = useState('');
+  const [joining, setJoining] = useState<number | null>(null);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
       try {
-        const [progressRes, teamRes] = await Promise.all([
-          fetch(`/api/progress/${user.username}`),
-          team ? fetch(`/api/teams/${team.id}/lesson-records`) : Promise.resolve(null),
-        ]);
-        if (progressRes.ok && !cancelled) {
-          const data = await progressRes.json();
+        const res = await fetch(`/api/progress/${user.username}`);
+        if (res.ok && !cancelled) {
+          const data = await res.json();
           setMasteredCards(data.masteredCards);
           setCompletedLessons(data.completedLessons);
-        }
-        if (teamRes && teamRes.ok && !cancelled) {
-          setTeamRecords(await teamRes.json());
         }
       } catch (e) {
         console.error(e);
@@ -114,7 +123,39 @@ export default function Dashboard({
       }
     })();
     return () => { cancelled = true; };
-  }, [user.username, team?.id]);
+  }, [user.username]);
+
+  useEffect(() => {
+    if (!selectedTeamId) { setTeamRecords([]); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/teams/${selectedTeamId}/lesson-records`);
+        if (res.ok && !cancelled) setTeamRecords(await res.json());
+        else if (!cancelled) setTeamRecords([]);
+      } catch { if (!cancelled) setTeamRecords([]); }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedTeamId]);
+
+  // Sync selectedTeamId when userTeams changes
+  useEffect(() => {
+    if (userTeams.length > 0 && !userTeams.find(t => t.id === selectedTeamId)) {
+      setSelectedTeamId(userTeams[0].id);
+    }
+    if (userTeams.length === 0) setSelectedTeamId(null);
+  }, [userTeams]);
+
+  // Load all available teams when panel opens
+  useEffect(() => {
+    if (!showTeamPanel) return;
+    setTeamPanelLoading(true);
+    fetch('/api/teams')
+      .then(r => r.json())
+      .then(d => setAllAvailableTeams(Array.isArray(d) ? d : []))
+      .catch(() => {})
+      .finally(() => setTeamPanelLoading(false));
+  }, [showTeamPanel]);
 
   const units = useMemo(() => {
     const seen = new Map<string, string>();
@@ -178,6 +219,7 @@ export default function Dashboard({
     : '';
 
   const unitsWithTeamRecords = units.filter(u => teamRecordsByUnit.has(u.unit_number));
+  const selectedTeam = userTeams.find(t => t.id === selectedTeamId) ?? null;
 
   const totalMastered = masteredCards.length;
   const totalCards = allCards.length;
@@ -194,7 +236,7 @@ export default function Dashboard({
             </div>
             <div>
               <h1 className="font-bold text-slate-800 leading-tight text-sm sm:text-base">中文 Flashcards</h1>
-              {team && <p className="text-xs text-indigo-500 font-medium">{team.name}</p>}
+              {selectedTeam && <p className="text-xs text-indigo-500 font-medium">{selectedTeam.name}</p>}
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -205,14 +247,11 @@ export default function Dashboard({
               <Avatar user={user} size="sm" />
               <span className="hidden sm:inline text-sm font-medium text-slate-700">{user.display_name}</span>
             </button>
-            {team && (
-              <button onClick={onManageTeam} title="Manage team" className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl">
+            {selectedTeam && (
+              <button onClick={() => onManageTeam(selectedTeam)} title="Manage team" className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl">
                 <Users className="w-4 h-4" />
               </button>
             )}
-            <button onClick={onSwitchTeam} title="Switch team" className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl">
-              <Layers className="w-4 h-4" />
-            </button>
             <button onClick={onLogout} title="Sign out" className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl">
               <LogOut className="w-4 h-4" />
             </button>
@@ -294,12 +333,54 @@ export default function Dashboard({
         </div>
 
         {/* ── 2. Team Records ───────────────────────────────── */}
-        {team && unitsWithTeamRecords.length > 0 && (
-          <div>
-            <h2 className="text-base font-bold text-slate-800 mb-3 flex items-center gap-2">
+        <div>
+          <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+            <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
               <Trophy className="w-4 h-4 text-amber-500" /> Team Records
-              <span className="text-sm font-normal text-slate-400">— {team.name}</span>
             </h2>
+            <div className="flex items-center gap-2">
+              {userTeams.length > 1 && (
+                <div className="relative">
+                  <select
+                    value={selectedTeamId ?? ''}
+                    onChange={e => setSelectedTeamId(Number(e.target.value))}
+                    className="appearance-none bg-white border border-slate-200 rounded-xl pl-3 pr-8 py-1.5 text-sm text-slate-700 font-medium shadow-sm focus:ring-2 focus:ring-indigo-400 outline-none cursor-pointer"
+                  >
+                    {userTeams.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                </div>
+              )}
+              {userTeams.length < 3 && (
+                <button
+                  onClick={() => { setShowTeamPanel(true); setTeamError(''); setTeamSuccess(''); setShowCreateTeam(false); setTeamSearch(''); }}
+                  className="flex items-center gap-1.5 text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-3 py-1.5 rounded-xl font-medium transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Join a team
+                </button>
+              )}
+            </div>
+          </div>
+
+          {userTeams.length === 0 ? (
+            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-8 text-center">
+              <div className="text-4xl mb-3">👥</div>
+              <p className="text-slate-700 font-semibold mb-1">No team yet</p>
+              <p className="text-slate-400 text-sm mb-4">Join a team to see how your scores compare with others</p>
+              <button
+                onClick={() => { setShowTeamPanel(true); setTeamError(''); setTeamSuccess(''); setShowCreateTeam(false); setTeamSearch(''); }}
+                className="inline-flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-semibold transition-colors"
+              >
+                <Plus className="w-4 h-4" /> Join or create a team
+              </button>
+            </div>
+          ) : unitsWithTeamRecords.length === 0 ? (
+            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm px-4 py-6 text-center text-slate-400 text-sm">
+              No timed records yet for <span className="font-medium text-slate-600">{selectedTeam?.name}</span> — complete a lesson in Timed Game mode to set one!
+            </div>
+          ) : (
             <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
               <div className="divide-y divide-slate-100">
                 {unitsWithTeamRecords.map(({ unit_number, unit_name }) => {
@@ -327,6 +408,167 @@ export default function Dashboard({
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Team join/create panel ─────────────────────── */}
+        {showTeamPanel && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={() => setShowTeamPanel(false)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                <h3 className="font-bold text-slate-800">Join or Create a Team</h3>
+                <button onClick={() => setShowTeamPanel(false)} className="p-1.5 hover:bg-slate-100 rounded-xl">
+                  <X className="w-5 h-5 text-slate-500" />
+                </button>
+              </div>
+              <div className="overflow-y-auto flex-1 p-4 space-y-4">
+                {(teamError || teamSuccess) && (
+                  <div className={`px-4 py-3 rounded-xl text-sm flex items-center gap-2 ${teamError ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+                    {teamError || teamSuccess}
+                    <button className="ml-auto" onClick={() => { setTeamError(''); setTeamSuccess(''); }}>
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {userTeams.length >= 3 && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-700">
+                    You're already in 3 teams (the maximum). Leave a team to join another.
+                  </div>
+                )}
+
+                {/* Browse & join */}
+                {userTeams.length < 3 && (
+                  <div>
+                    <p className="text-sm font-semibold text-slate-700 mb-2">Browse teams</p>
+                    <div className="relative mb-3">
+                      <input
+                        type="text"
+                        value={teamSearch}
+                        onChange={e => setTeamSearch(e.target.value)}
+                        placeholder="Search teams…"
+                        className="w-full pl-3 pr-8 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-400 outline-none"
+                      />
+                      {teamSearch && <button onClick={() => setTeamSearch('')} className="absolute right-2.5 top-2.5 text-slate-400"><X className="w-3.5 h-3.5" /></button>}
+                    </div>
+                    {teamPanelLoading ? (
+                      <div className="flex justify-center py-4"><Loader className="w-5 h-5 animate-spin text-slate-400" /></div>
+                    ) : (
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {allAvailableTeams
+                          .filter(t => t.name.toLowerCase().includes(teamSearch.toLowerCase()))
+                          .map(t => {
+                            const membership = userTeams.find(m => m.id === t.id);
+                            return (
+                              <div key={t.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                                <div>
+                                  <p className="font-medium text-slate-800 text-sm">{t.name}</p>
+                                  {t.description && <p className="text-xs text-slate-400">{t.description}</p>}
+                                  <p className="text-xs text-slate-400">{t.member_count} member{t.member_count !== 1 ? 's' : ''}</p>
+                                </div>
+                                {membership ? (
+                                  <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Joined</span>
+                                ) : (
+                                  <button
+                                    onClick={async () => {
+                                      setJoining(t.id);
+                                      setTeamError('');
+                                      try {
+                                        const res = await fetch(`/api/teams/${t.id}/join`, {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ user_id: user.id }),
+                                        });
+                                        if (res.ok) {
+                                          setTeamSuccess('Join request sent! An owner must approve it.');
+                                        } else {
+                                          const d = await res.json();
+                                          setTeamError(d.error || 'Failed to join');
+                                        }
+                                      } catch { setTeamError('Server error'); }
+                                      finally { setJoining(null); }
+                                    }}
+                                    disabled={joining === t.id}
+                                    className="text-xs bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg font-medium flex items-center gap-1"
+                                  >
+                                    {joining === t.id ? <Loader className="w-3 h-3 animate-spin" /> : 'Request'}
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Create team */}
+                <div className="border-t border-slate-100 pt-4">
+                  {showCreateTeam ? (
+                    <div className="space-y-3">
+                      <p className="text-sm font-semibold text-slate-700">Create a new team</p>
+                      <input
+                        type="text"
+                        value={newTeamName}
+                        onChange={e => setNewTeamName(e.target.value)}
+                        placeholder="Team name"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-400 outline-none"
+                        autoFocus
+                      />
+                      <input
+                        type="text"
+                        value={newTeamDesc}
+                        onChange={e => setNewTeamDesc(e.target.value)}
+                        placeholder="Description (optional)"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-400 outline-none"
+                      />
+                      <div className="flex gap-2">
+                        <button onClick={() => setShowCreateTeam(false)} className="flex-1 py-2 border border-slate-200 text-slate-600 rounded-xl text-sm hover:bg-slate-50">Cancel</button>
+                        <button
+                          onClick={async () => {
+                            if (!newTeamName.trim()) { setTeamError('Team name is required'); return; }
+                            setCreating(true);
+                            setTeamError('');
+                            try {
+                              const res = await fetch('/api/teams', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ name: newTeamName.trim(), description: newTeamDesc.trim() || null, creator_id: user.id }),
+                              });
+                              if (res.ok) {
+                                const team = await res.json();
+                                const newTeamObj = { ...team, role: 'owner', status: 'approved' };
+                                onTeamsChange([...userTeams, newTeamObj]);
+                                setSelectedTeamId(team.id);
+                                setTeamSuccess(`Team "${team.name}" created!`);
+                                setShowCreateTeam(false);
+                                setNewTeamName('');
+                                setNewTeamDesc('');
+                              } else {
+                                const d = await res.json();
+                                setTeamError(d.error || 'Failed to create team');
+                              }
+                            } catch { setTeamError('Server error'); }
+                            finally { setCreating(false); }
+                          }}
+                          disabled={creating || !newTeamName.trim()}
+                          className="flex-1 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-1"
+                        >
+                          {creating ? <Loader className="w-3 h-3 animate-spin" /> : 'Create'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowCreateTeam(true)}
+                      className="w-full border-2 border-dashed border-slate-200 hover:border-indigo-400 text-slate-500 hover:text-indigo-600 rounded-xl py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+                    >
+                      <Plus className="w-4 h-4" /> Create a new team
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>

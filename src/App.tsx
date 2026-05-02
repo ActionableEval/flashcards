@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, RotateCcw, Shuffle, Star, Coffee, Plus, X, Check, AlertCircle, CheckCircle, User, Link, Copy, Trophy, Clock, Users, LogOut, Settings, Pencil, LayoutDashboard } from 'lucide-react';
 import UserLogin from './UserLogin';
-import TeamSelector from './TeamSelector';
 import TeamManager from './TeamManager';
 import ProfileEditor, { Avatar } from './ProfileEditor';
 import Dashboard from './Dashboard';
@@ -23,10 +22,11 @@ interface Team {
 
 const ChineseFoodFlashcards = () => {
   // ─── App screen state ─────────────────────────────────────────────
-  // 'login' | 'team' | 'dashboard' | 'app'
-  const [screen, setScreen] = useState<'login' | 'team' | 'dashboard' | 'app'>('login');
+  // 'login' | 'dashboard' | 'app'
+  const [screen, setScreen] = useState<'login' | 'dashboard' | 'app'>('login');
   const [currentUser, setCurrentUser] = useState<UserData | null>(null);
-  const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
+  const [userTeams, setUserTeams] = useState<Team[]>([]);
+  const [managedTeam, setManagedTeam] = useState<Team | null>(null);
   const [showTeamManager, setShowTeamManager] = useState(false);
   const [showProfileEditor, setShowProfileEditor] = useState(false);
 
@@ -162,15 +162,17 @@ const ChineseFoodFlashcards = () => {
   };
 
   // ─── User / Team flow ─────────────────────────────────────────────
-  const handleLogin = (user: UserData) => {
+  const handleLogin = async (user: UserData) => {
     setCurrentUser(user);
-    setScreen('team');
-  };
-
-  const handleTeamSelect = (team: Team | null) => {
-    setCurrentTeam(team);
+    try {
+      const res = await fetch(`/api/users/${user.id}/teams`);
+      const teams = await res.json();
+      setUserTeams(Array.isArray(teams) ? teams.filter((t: any) => t.status === 'approved') : []);
+    } catch {
+      setUserTeams([]);
+    }
+    loadProgress(user.username);
     setScreen('dashboard');
-    if (currentUser) loadProgress(currentUser.username);
   };
 
   const handleStartLesson = (units: string[], _label?: string) => {
@@ -192,7 +194,7 @@ const ChineseFoodFlashcards = () => {
 
   const handleLogout = () => {
     setCurrentUser(null);
-    setCurrentTeam(null);
+    setUserTeams([]);
     setScreen('login');
     setMasteredKeys([]);
     setCompletedLessons([]);
@@ -204,10 +206,10 @@ const ChineseFoodFlashcards = () => {
     setFinalTimeMs(null);
   };
 
-  const handleTeamLeave = () => {
-    setCurrentTeam(null);
+  const handleTeamLeave = (teamId: number) => {
+    setUserTeams(prev => prev.filter(t => t.id !== teamId));
+    setManagedTeam(null);
     setShowTeamManager(false);
-    setScreen('team');
   };
 
   // ─── Close user menu on outside click ────────────────────────────
@@ -445,29 +447,25 @@ const ChineseFoodFlashcards = () => {
     return <UserLogin onLogin={handleLogin} />;
   }
 
-  if (screen === 'team') {
-    return <TeamSelector user={currentUser!} onSelect={handleTeamSelect} />;
-  }
-
   if (screen === 'dashboard') {
     return (
       <>
         <Dashboard
           user={currentUser!}
-          team={currentTeam}
+          userTeams={userTeams}
           allCards={allCards}
           onStartLesson={handleStartLesson}
           onEditProfile={() => setShowProfileEditor(true)}
-          onSwitchTeam={() => setScreen('team')}
-          onManageTeam={() => setShowTeamManager(true)}
+          onManageTeam={(team) => { setManagedTeam(team); setShowTeamManager(true); }}
+          onTeamsChange={setUserTeams}
           onLogout={handleLogout}
         />
-        {showTeamManager && currentUser && currentTeam && (
+        {showTeamManager && currentUser && managedTeam && (
           <TeamManager
             user={currentUser}
-            team={currentTeam}
+            team={managedTeam}
             onClose={() => setShowTeamManager(false)}
-            onLeave={handleTeamLeave}
+            onLeave={() => handleTeamLeave(managedTeam.id)}
           />
         )}
         {showProfileEditor && currentUser && (
