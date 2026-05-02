@@ -96,6 +96,16 @@ export default function Dashboard({
   const [showTeamPanel, setShowTeamPanel] = useState(false);
   const [allAvailableTeams, setAllAvailableTeams] = useState<any[]>([]);
   const [teamPanelLoading, setTeamPanelLoading] = useState(false);
+  const [confirmRestart, setConfirmRestart] = useState<{ unit: string; name: string } | null>(null);
+
+  const handleStudyClick = (units: string[], label: string, isCompleted: boolean) => {
+    if (isCompleted && units.length === 1) {
+      const unitCards = allCards.filter(c => String(c.unitNumber) === String(units[0]));
+      setConfirmRestart({ unit: units[0], name: unitCards[0]?.unitName || label });
+    } else {
+      onStartLesson(units, label);
+    }
+  };
   const [teamSearch, setTeamSearch] = useState('');
   const [showCreateTeam, setShowCreateTeam] = useState(false);
   const [newTeamName, setNewTeamName] = useState('');
@@ -319,7 +329,7 @@ export default function Dashboard({
                         </div>
                       </div>
                       <button
-                        onClick={() => { setSearch(''); onStartLesson([c.unitNumber], `Unit ${c.unitNumber}: ${c.unitName}`); }}
+                        onClick={() => { setSearch(''); handleStudyClick([c.unitNumber], `Unit ${c.unitNumber}: ${c.unitName}`, !!completedLessons.find(l => String(l.unit_number) === String(c.unitNumber))); }}
                         className="flex-shrink-0 text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-3 py-1.5 rounded-xl font-medium flex items-center gap-1"
                       >
                         Unit {c.unitNumber} <ChevronRight className="w-3 h-3" />
@@ -678,10 +688,10 @@ export default function Dashboard({
 
                       {/* Study button */}
                       <button
-                        onClick={() => onStartLesson([ls.unit_number], `Unit ${ls.unit_number}: ${ls.unit_name}`)}
-                        className="flex-shrink-0 flex items-center gap-1.5 bg-slate-800 hover:bg-rose-500 text-white px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors"
+                        onClick={() => handleStudyClick([ls.unit_number], `Unit ${ls.unit_number}: ${ls.unit_name}`, ls.completed)}
+                        className={`flex-shrink-0 flex items-center gap-1.5 text-white px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${ls.completed ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-slate-800 hover:bg-rose-500'}`}
                       >
-                        <Play className="w-3 h-3" /> Study
+                        <Play className="w-3 h-3" /> {ls.completed ? 'Restart' : 'Study'}
                       </button>
                     </div>
                   );
@@ -703,7 +713,7 @@ export default function Dashboard({
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => { setTermsLesson(null); onStartLesson([termsLesson], `Unit ${termsLesson}: ${termsLessonName}`); }}
+                  onClick={() => { setTermsLesson(null); handleStudyClick([termsLesson], `Unit ${termsLesson}: ${termsLessonName}`, !!completedLessons.find(l => String(l.unit_number) === String(termsLesson))); }}
                   className="flex items-center gap-1.5 bg-rose-500 hover:bg-rose-600 text-white px-3 py-1.5 rounded-xl text-sm font-semibold"
                 >
                   <Play className="w-3.5 h-3.5" /> Study
@@ -734,6 +744,33 @@ export default function Dashboard({
                   );
                 })}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Restart Confirmation Modal ─────────────────────── */}
+      {confirmRestart && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={() => setConfirmRestart(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-xs w-full p-6 text-center" onClick={e => e.stopPropagation()}>
+            <div className="text-4xl mb-3">🔄</div>
+            <h3 className="text-lg font-bold text-slate-800 mb-1">Already completed!</h3>
+            <p className="text-sm text-slate-500 mb-5">
+              Do you want to practice Unit {confirmRestart.unit}: <span className="font-medium text-slate-700">{confirmRestart.name}</span> again from the beginning?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmRestart(null)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { const u = confirmRestart; setConfirmRestart(null); onStartLesson([u.unit], `Unit ${u.unit}: ${u.name}`); }}
+                className="flex-1 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-semibold transition-colors"
+              >
+                Yes, restart!
+              </button>
             </div>
           </div>
         </div>
