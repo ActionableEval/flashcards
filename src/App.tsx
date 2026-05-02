@@ -369,7 +369,6 @@ const ChineseFoodFlashcards = () => {
     setMasteredKeys(updatedMastered);
     if (currentUser) {
       saveMastered(currentUser.username, id, current.unitNumber);
-      checkLessonCompletion(currentUser.username, updatedMastered, current.unitNumber, isGameMode ? elapsedMs : undefined);
     }
 
     if (isGameMode) {
@@ -387,7 +386,16 @@ const ChineseFoodFlashcards = () => {
       });
       setShowAnswer(false);
     } else {
-      if (cards.length <= 1) return;
+      if (cards.length <= 1) {
+        // Last card mastered — show completion overlay
+        setLessonJustCompleted(true);
+        if (currentUser && selectedUnit) {
+          const unitCards = allCards.filter(c => String(c.unitNumber) === String(selectedUnit));
+          const unitName = unitCards[0]?.unitName || `Unit ${selectedUnit}`;
+          saveCompletedLesson(currentUser.username, String(selectedUnit), unitName, undefined);
+        }
+        return;
+      }
       const masteredCard = cards[currentCard];
       const updated = cards.filter((_, i) => i !== currentCard);
       setCards(updated);
