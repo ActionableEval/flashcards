@@ -327,6 +327,11 @@ const ChineseFoodFlashcards = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ kid: currentUser.username, unit_number: selectedUnit }),
         }).catch(() => {});
+        fetch('/api/lessons', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ kid: currentUser.username, unit_number: selectedUnit }),
+        }).catch(() => {});
       }
     }
     setCurrentCard(0);
