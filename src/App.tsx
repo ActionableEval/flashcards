@@ -365,14 +365,12 @@ const ChineseFoodFlashcards = () => {
     if (!current) return;
     const id = current.simplified;
 
-    setMasteredKeys(prev => {
-      const updated = prev.includes(id) ? prev : [...prev, id];
-      if (currentUser) {
-        saveMastered(currentUser.username, id, current.unitNumber);
-        checkLessonCompletion(currentUser.username, updated, current.unitNumber, isGameMode ? elapsedMs : undefined);
-      }
-      return updated;
-    });
+    const updatedMastered = masteredKeys.includes(id) ? masteredKeys : [...masteredKeys, id];
+    setMasteredKeys(updatedMastered);
+    if (currentUser) {
+      saveMastered(currentUser.username, id, current.unitNumber);
+      checkLessonCompletion(currentUser.username, updatedMastered, current.unitNumber, isGameMode ? elapsedMs : undefined);
+    }
 
     if (isGameMode) {
       const currentIndex = currentCard;
