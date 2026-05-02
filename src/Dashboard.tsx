@@ -627,9 +627,9 @@ export default function Dashboard({
                     >
                       {/* Checkbox */}
                       <button onClick={() => toggleUnit(ls.unit_number)} className="flex-shrink-0">
-                        {isSelected
-                          ? <CheckCircle2 className="w-5 h-5 text-indigo-500" />
-                          : <Circle className="w-5 h-5 text-slate-200 hover:text-slate-300" />}
+                        <div className={`w-4.5 h-4.5 w-[18px] h-[18px] rounded flex items-center justify-center border-2 transition-colors ${isSelected ? 'bg-indigo-500 border-indigo-500' : 'border-slate-300 hover:border-indigo-400 bg-white'}`}>
+                          {isSelected && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+                        </div>
                       </button>
 
                       {/* Lesson name + progress bar */}
