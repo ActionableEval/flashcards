@@ -523,8 +523,8 @@ const ChineseFoodFlashcards = () => {
               >
                 {currentUser && <Avatar user={currentUser} size="sm" />}
                 <span className="text-sm font-medium text-slate-700">{currentUser?.display_name}</span>
-                {currentTeam && (
-                  <span className="text-xs bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-full">{currentTeam.name}</span>
+                {userTeams.length > 0 && (
+                  <span className="text-xs bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-full">{userTeams[0].name}</span>
                 )}
               </button>
 
@@ -563,15 +563,6 @@ const ChineseFoodFlashcards = () => {
                     </select>
                   </div>
 
-                  {currentTeam && (
-                    <button
-                      onClick={() => { setShowTeamManager(true); setShowUserMenu(false); }}
-                      className="w-full text-left px-3 py-2.5 hover:bg-slate-50 flex items-center gap-2 text-sm text-slate-700"
-                    >
-                      <Users className="w-4 h-4 text-indigo-500" />
-                      Manage Team
-                    </button>
-                  )}
                   <button
                     onClick={() => { setScreen('team'); setShowUserMenu(false); }}
                     className="w-full text-left px-3 py-2.5 hover:bg-slate-50 flex items-center gap-2 text-sm text-slate-700"
@@ -839,12 +830,12 @@ const ChineseFoodFlashcards = () => {
       </div>
 
       {/* Team Manager Modal */}
-      {showTeamManager && currentUser && currentTeam && (
+      {showTeamManager && currentUser && managedTeam && (
         <TeamManager
           user={currentUser}
-          team={currentTeam}
+          team={managedTeam}
           onClose={() => setShowTeamManager(false)}
-          onLeave={handleTeamLeave}
+          onLeave={() => handleTeamLeave(managedTeam.id)}
         />
       )}
 
