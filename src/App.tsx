@@ -52,6 +52,9 @@ const ChineseFoodFlashcards = () => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
 
+  // Track study session start time for non-game completions
+  const lessonStartTimeRef = useRef<number | null>(null);
+
   // Timed game state
   const [isGameMode, setIsGameMode] = useState(false);
   const [countdown, setCountdown] = useState(0);
@@ -204,6 +207,7 @@ const ChineseFoodFlashcards = () => {
     setGameOrder([]);
     setFinalTimeMs(null);
     setLessonJustCompleted(false);
+    lessonStartTimeRef.current = Date.now();
     setScreen('app');
   };
 
@@ -405,7 +409,8 @@ const ChineseFoodFlashcards = () => {
         if (currentUser && selectedUnit) {
           const unitCards = allCards.filter(c => String(c.unitNumber) === String(selectedUnit));
           const unitName = unitCards[0]?.unitName || `Unit ${selectedUnit}`;
-          saveCompletedLesson(currentUser.username, String(selectedUnit), unitName, undefined);
+          const elapsed = lessonStartTimeRef.current ? Date.now() - lessonStartTimeRef.current : undefined;
+          saveCompletedLesson(currentUser.username, String(selectedUnit), unitName, elapsed);
         }
         return;
       }
