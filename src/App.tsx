@@ -507,7 +507,6 @@ const ChineseFoodFlashcards = () => {
             </div>
             <div>
               <h1 className="text-xl font-bold text-slate-800">{headerTitle}</h1>
-              <p className="text-xs text-slate-400">{cards.length} cards</p>
             </div>
           </div>
 
