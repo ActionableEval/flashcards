@@ -637,8 +637,16 @@ const ChineseFoodFlashcards = () => {
               </div>
             )}
             {finalTimeMs !== null && !isGameMode && (
-              <div className="absolute inset-0 bg-black/50 z-20 flex items-center justify-center rounded-3xl">
-                <div className="text-white text-3xl font-bold">Final: {formatMs(finalTimeMs)}</div>
+              <div className="absolute inset-0 bg-black/60 z-20 flex flex-col items-center justify-center rounded-3xl gap-4 p-6">
+                <div className="text-5xl">🎉</div>
+                <div className="text-white text-3xl font-bold">{formatMs(finalTimeMs)}</div>
+                <p className="text-white/80 text-sm">Lesson complete!</p>
+                <button
+                  onClick={() => setScreen('dashboard')}
+                  className="flex items-center gap-2 bg-white text-slate-800 font-bold px-6 py-3 rounded-2xl shadow-lg hover:bg-rose-50 hover:text-rose-600 transition-colors text-sm mt-2"
+                >
+                  <LayoutDashboard className="w-4 h-4" /> Back to Dashboard
+                </button>
               </div>
             )}
 
@@ -722,6 +730,23 @@ const ChineseFoodFlashcards = () => {
             <CheckCircle className="w-4 h-4" /> Mastered
           </button>
         </div>
+
+        {/* Lesson complete banner (non-timed mode) */}
+        {selectedUnit && completedLessons.includes(selectedUnit) && finalTimeMs === null && (
+          <div className="max-w-md mx-auto mb-4 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl shadow-lg p-4 flex flex-col items-center gap-3 text-white text-center">
+            <div className="text-3xl">🏆</div>
+            <div>
+              <p className="font-bold text-base">Lesson Complete!</p>
+              <p className="text-emerald-100 text-xs mt-0.5">All cards mastered for this unit</p>
+            </div>
+            <button
+              onClick={() => setScreen('dashboard')}
+              className="flex items-center gap-2 bg-white text-emerald-700 font-bold px-5 py-2.5 rounded-xl shadow hover:bg-emerald-50 transition-colors text-sm w-full justify-center"
+            >
+              <LayoutDashboard className="w-4 h-4" /> Back to Dashboard
+            </button>
+          </div>
+        )}
 
         {/* Notification */}
         {error && (
