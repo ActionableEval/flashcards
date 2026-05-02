@@ -299,6 +299,7 @@ const ChineseFoodFlashcards = () => {
       : allCards;
     setCards(filtered);
     setMasteredKeys([]);
+    setOverlayDismissed(false);
     if (selectedUnit) {
       setCompletedLessons(prev => prev.filter(u => u !== selectedUnit));
       if (currentUser) {
