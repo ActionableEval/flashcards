@@ -641,25 +641,41 @@ const ChineseFoodFlashcards = () => {
                 <div className="text-5xl">🏆</div>
                 <p className="text-white font-bold text-xl">Lesson Complete!</p>
                 <p className="text-emerald-100 text-sm">All cards mastered</p>
-                <button
-                  onClick={() => setScreen('dashboard')}
-                  className="flex items-center gap-2 bg-white text-emerald-700 font-bold px-6 py-3 rounded-2xl shadow-lg hover:bg-emerald-50 transition-colors text-sm mt-2"
-                >
-                  <LayoutDashboard className="w-4 h-4" /> Back to Dashboard
-                </button>
+                <div className="flex flex-col gap-2 w-full mt-2">
+                  <button
+                    onClick={() => setScreen('dashboard')}
+                    className="flex items-center justify-center gap-2 bg-white text-emerald-700 font-bold px-6 py-3 rounded-2xl shadow-lg hover:bg-emerald-50 transition-colors text-sm w-full"
+                  >
+                    <LayoutDashboard className="w-4 h-4" /> Back to Dashboard
+                  </button>
+                  <button
+                    onClick={resetCards}
+                    className="flex items-center justify-center gap-2 bg-emerald-500/60 hover:bg-emerald-500/80 text-white font-semibold px-6 py-2.5 rounded-2xl transition-colors text-sm w-full"
+                  >
+                    <RotateCcw className="w-4 h-4" /> Restart
+                  </button>
+                </div>
               </div>
             )}
             {finalTimeMs !== null && !isGameMode && (
-              <div className="absolute inset-0 bg-black/60 z-20 flex flex-col items-center justify-center rounded-3xl gap-4 p-6" onClick={e => e.stopPropagation()}>
+              <div className="absolute inset-0 bg-black/60 z-20 flex flex-col items-center justify-center rounded-3xl gap-3 p-6" onClick={e => e.stopPropagation()}>
                 <div className="text-5xl">🎉</div>
                 <div className="text-white text-3xl font-bold">{formatMs(finalTimeMs)}</div>
                 <p className="text-white/80 text-sm">Lesson complete!</p>
-                <button
-                  onClick={() => setScreen('dashboard')}
-                  className="flex items-center gap-2 bg-white text-slate-800 font-bold px-6 py-3 rounded-2xl shadow-lg hover:bg-rose-50 hover:text-rose-600 transition-colors text-sm mt-2"
-                >
-                  <LayoutDashboard className="w-4 h-4" /> Back to Dashboard
-                </button>
+                <div className="flex flex-col gap-2 w-full mt-2">
+                  <button
+                    onClick={() => setScreen('dashboard')}
+                    className="flex items-center justify-center gap-2 bg-white text-slate-800 font-bold px-6 py-3 rounded-2xl shadow-lg hover:bg-rose-50 hover:text-rose-600 transition-colors text-sm w-full"
+                  >
+                    <LayoutDashboard className="w-4 h-4" /> Back to Dashboard
+                  </button>
+                  <button
+                    onClick={resetCards}
+                    className="flex items-center justify-center gap-2 bg-white/20 hover:bg-white/30 text-white font-semibold px-6 py-2.5 rounded-2xl transition-colors text-sm w-full"
+                  >
+                    <RotateCcw className="w-4 h-4" /> Restart
+                  </button>
+                </div>
               </div>
             )}
 
