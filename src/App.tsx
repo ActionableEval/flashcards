@@ -154,7 +154,7 @@ const ChineseFoodFlashcards = () => {
     const unitCards = allCards.filter(c => String(c.unitNumber) === String(unitNumber));
     if (unitCards.length === 0) return;
     const allMastered = unitCards.every(c => newMasteredKeys.includes(c.simplified));
-    if (allMastered && !completedLessons.includes(String(unitNumber))) {
+    if (allMastered) {
       const unitName = unitCards[0]?.unitName || `Unit ${unitNumber}`;
       setLessonJustCompleted(true);
       saveCompletedLesson(username, String(unitNumber), unitName, time_ms);
