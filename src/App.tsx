@@ -299,7 +299,16 @@ const ChineseFoodFlashcards = () => {
       : allCards;
     setCards(filtered);
     setMasteredKeys([]);
-    if (selectedUnit) setCompletedLessons(prev => prev.filter(u => u !== selectedUnit));
+    if (selectedUnit) {
+      setCompletedLessons(prev => prev.filter(u => u !== selectedUnit));
+      if (currentUser) {
+        fetch('/api/mastered', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ kid: currentUser.username, unit_number: selectedUnit }),
+        }).catch(() => {});
+      }
+    }
     setCurrentCard(0);
     setShowAnswer(false);
     if (currentUser) updateURL(currentUser.username, filtered);

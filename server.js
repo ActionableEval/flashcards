@@ -332,10 +332,12 @@ app.post('/api/mastered', async (req, res) => {
 
 app.delete('/api/mastered', async (req, res) => {
   try {
-    const { kid, simplified } = req.body;
+    const { kid, simplified, unit_number } = req.body;
     if (!kid) return res.status(400).json({ error: 'kid is required' });
     if (simplified) {
       await pool.query('DELETE FROM mastered_cards WHERE kid = $1 AND simplified = $2', [kid, simplified]);
+    } else if (unit_number) {
+      await pool.query('DELETE FROM mastered_cards WHERE kid = $1 AND unit_number = $2', [kid, unit_number]);
     } else {
       await pool.query('DELETE FROM mastered_cards WHERE kid = $1', [kid]);
     }
