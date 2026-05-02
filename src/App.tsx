@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, RotateCcw, Shuffle, Star, Coffee, Plus, X, Check, AlertCircle, Edit, CheckCircle, User, Link, Copy, Trophy, Clock } from 'lucide-react';
 
 const ChineseFoodFlashcards = () => {
   const [currentKid, setCurrentKid] = useState(null);
   const [showKidSelector, setShowKidSelector] = useState(true);
+  const [selectedUnit, setSelectedUnit] = useState(''); 
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [currentCard, setCurrentCard] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
@@ -16,17 +17,111 @@ const ChineseFoodFlashcards = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Mastery tracking (simplified keys)
+  const [masteredKeys, setMasteredKeys] = useState<string[]>([]);
+
+  // Completed lessons (unit_numbers)
+  const [completedLessons, setCompletedLessons] = useState<string[]>([]);
+
+  // Kid switcher menu state
+  const [showKidMenu, setShowKidMenu] = useState(false);
+  const kidMenuRef = useRef<HTMLDivElement | null>(null);
+
+  // Get unique units from loaded cards
+  const getAvailableUnits = () => {
+    const units = [...new Set(allCards.map(card => card.unitNumber).filter(Boolean))];
+    return units.sort((a, b) => parseInt(a) - parseInt(b));
+  };
+
   // Timed Game state
   const [isGameMode, setIsGameMode] = useState(false);
-  const [countdown, setCountdown] = useState(0); // 0 when not counting down
-  const [gameOrder, setGameOrder] = useState([]); // array of indices into cards
+  const [countdown, setCountdown] = useState(0);
+  const [gameOrder, setGameOrder] = useState([]);
   const [gamePosition, setGamePosition] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [timerId, setTimerId] = useState(null);
   const [finalTimeMs, setFinalTimeMs] = useState(null);
 
-  // Mastery tracking (IDs by `simplified`)
-  const [masteredKeys, setMasteredKeys] = useState<string[]>([]);
+  // ─── Database API helpers ─────────────────────────────────────────
+
+  const loadProgress = async (kid: string) => {
+    try {
+      const res = await fetch(`/api/progress/${kid}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const masteredSimplified = data.masteredCards.map((c: any) => c.simplified);
+      setMasteredKeys(masteredSimplified);
+      const completedUnitNumbers = data.completedLessons.map((l: any) => l.unit_number);
+      setCompletedLessons(completedUnitNumbers);
+    } catch (e) {
+      console.error('Failed to load progress:', e);
+    }
+  };
+
+  const saveMastered = async (kid: string, simplified: string, unit_number: string) => {
+    try {
+      await fetch('/api/mastered', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kid, simplified, unit_number }),
+      });
+    } catch (e) {
+      console.error('Failed to save mastered card:', e);
+    }
+  };
+
+  const saveCompletedLesson = async (kid: string, unit_number: string, unit_name: string) => {
+    try {
+      await fetch('/api/lessons', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kid, unit_number, unit_name }),
+      });
+      setCompletedLessons(prev => prev.includes(unit_number) ? prev : [...prev, unit_number]);
+    } catch (e) {
+      console.error('Failed to save completed lesson:', e);
+    }
+  };
+
+  // Check if all cards in a unit are mastered after a new mastery
+  const checkLessonCompletion = (kid: string, newMasteredKeys: string[], unitNumber: string) => {
+    if (!unitNumber) return;
+    const unitCards = allCards.filter(c => String(c.unitNumber) === String(unitNumber));
+    if (unitCards.length === 0) return;
+    const allMastered = unitCards.every(c => newMasteredKeys.includes(c.simplified));
+    if (allMastered && !completedLessons.includes(String(unitNumber))) {
+      const unitName = unitCards[0]?.unitName || `Unit ${unitNumber}`;
+      saveCompletedLesson(kid, String(unitNumber), unitName);
+      setError(`🎉 Unit ${unitNumber}: ${unitName} completed!`);
+      setTimeout(() => setError(''), 4000);
+    }
+  };
+
+  // ─── Kid selection ────────────────────────────────────────────────
+
+  const changeKid = (kidName: 'sophie' | 'joyce') => {
+    setCurrentKid(kidName);
+    setShowKidSelector(false);
+    const filtered = selectedUnit
+      ? allCards.filter(c => String(c.unitNumber) === String(selectedUnit))
+      : allCards;
+    setCards(filtered);
+    updateURL(kidName, filtered);
+    loadProgress(kidName);
+  };
+
+  // Close the kid menu when clicking outside
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      const node = kidMenuRef.current;
+      if (!node) return;
+      if (e.target instanceof Node && !node.contains(e.target)) {
+        setShowKidMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
 
   // Replace with your Google Sheet CSV URL
   const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTyy3u177SKD7E0rercRBFdARVuQMAhlYuMm_7ug1y_xgbVJIGNRpquACUyxdj6BB3zJ0bNqpH4Dyky/pub?gid=0&single=true&output=csv';
@@ -36,7 +131,6 @@ const ChineseFoodFlashcards = () => {
     if (lines.length === 0) return [];
     const headers = lines[0].split(',').map(h => h.trim());
     return lines.slice(1).map(line => {
-      // naive CSV split; if your data may contain commas/quotes, consider a CSV parser
       const cells = line.split(',').map(c => c.trim());
       const row: Record<string, string> = {};
       headers.forEach((h, i) => (row[h] = cells[i] ?? ''));
@@ -55,8 +149,6 @@ const ChineseFoodFlashcards = () => {
         const res = await fetch(SHEET_CSV_URL);
         const text = await res.text();
         const rows = parseCsv(text);
-  
-        // normalize rows to app shape; ensures fields exist
         const mapped = rows
           .filter(r => r.simplified || r.english)
           .map(r => ({
@@ -67,14 +159,12 @@ const ChineseFoodFlashcards = () => {
             unitNumber: r.unitNumber || '',
             unitName: r.unitName || '',
           }));
-  
         if (!cancelled) {
           setAllCards(mapped);
           setCards(mapped);
         }
       } catch (e) {
         console.error('Failed to load Google Sheet CSV:', e);
-        // Optional: keep cards empty or fallback to previous local data if desired
       }
     })();
     return () => { cancelled = true; };
@@ -97,21 +187,30 @@ const ChineseFoodFlashcards = () => {
     }
   }, [cards, currentKid, showKidSelector]);
 
+  
   const selectKid = (kidName) => {
     setCurrentKid(kidName);
-    setCards(allCards);
+    const filteredCards = selectedUnit 
+      ? allCards.filter(card => card.unitNumber === selectedUnit)
+      : allCards;
+    setCards(filteredCards);
     setShowKidSelector(false);
-    updateURL(kidName, allCards);
+    updateURL(kidName, filteredCards);
+    loadProgress(kidName);
   };
 
+
   const switchKid = () => {
-    // Clear URL params when switching
     window.history.replaceState({}, '', window.location.pathname);
     setShowKidSelector(true);
     setCurrentKid(null);
+    setSelectedUnit('');
     setCurrentCard(0);
     setShowAnswer(false);
+    setMasteredKeys([]);
+    setCompletedLessons([]);
   };
+
 
   const generateShareableLink = () => {
     try {
@@ -185,16 +284,26 @@ const ChineseFoodFlashcards = () => {
     }
   };
 
-  // Leaderboard helpers
-  const getLeaderboard = (kid) => {
-    try {
-      const key = `timedLeaderboard:${kid}`;
-      const raw = localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
+
+// Leaderboard helpers
+const getLeaderboard = (kid: string, unit: string | number | 'all'): number | null => {
+  try {
+    const unitKey = unit === '' ? 'all' : String(unit);
+    const key = `timedLeaderboard:${kid}:unit:${unitKey}`;
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed === 'number') return parsed;
+    if (Array.isArray(parsed)) {
+      const best = parsed.length ? Math.min(...parsed) : null;
+      if (best !== null) localStorage.setItem(key, JSON.stringify(best));
+      return best;
     }
-  };
+    return null;
+  } catch {
+    return null;
+  }
+};
 
   const formatMs = (ms) => {
     const totalSeconds = Math.floor(ms / 1000);
@@ -216,7 +325,6 @@ const ChineseFoodFlashcards = () => {
 
   const startTimedGame = () => {
     if (cards.length === 0 || isGameMode || countdown > 0) return;
-    // Prepare randomized order of indices
     const order = cards.map((_, i) => i).sort(() => Math.random() - 0.5);
     setGameOrder(order);
     setGamePosition(0);
@@ -224,7 +332,6 @@ const ChineseFoodFlashcards = () => {
     setCountdown(3);
   };
 
-  // Countdown effect
   useEffect(() => {
     if (countdown <= 0) return;
     const id = setInterval(() => {
@@ -233,13 +340,10 @@ const ChineseFoodFlashcards = () => {
     return () => clearInterval(id);
   }, [countdown]);
 
-  // When countdown finishes, start game timer
   useEffect(() => {
     if (countdown === 0 && gameOrder.length > 0 && !isGameMode) {
-      // enter game mode
       setIsGameMode(true);
       setElapsedMs(0);
-      // Jump to first card in order
       setCurrentCard(gameOrder[0]);
       const id = window.setInterval(() => {
         setElapsedMs((t) => t + 100);
@@ -255,17 +359,22 @@ const ChineseFoodFlashcards = () => {
       setTimerId(null);
     }
     setFinalTimeMs(finalMs);
-    // Save to leaderboard (top 3) scoped by kid
+
     try {
-      const key = `timedLeaderboard:${currentKid || 'default'}`;
+      const kidKey = currentKid || 'default';
+      const unitKey = selectedUnit === '' ? 'all' : String(selectedUnit);
+      const key = `timedLeaderboard:${kidKey}:unit:${unitKey}`;
       const existingRaw = localStorage.getItem(key);
-      const list = existingRaw ? JSON.parse(existingRaw) : [];
-      list.push(finalMs);
-      list.sort((a, b) => a - b);
-      const top3 = list.slice(0, 3);
-      localStorage.setItem(key, JSON.stringify(top3));
+      let prevBest: number | null = null;
+      if (existingRaw) {
+        const parsed = JSON.parse(existingRaw);
+        if (typeof parsed === 'number') prevBest = parsed;
+        else if (Array.isArray(parsed) && parsed.length) prevBest = Math.min(...parsed);
+      }
+      const newBest = prevBest === null ? finalMs : Math.min(prevBest, finalMs);
+      localStorage.setItem(key, JSON.stringify(newBest));
     } catch {}
-    // reset game-specific state
+
     setGameOrder([]);
     setGamePosition(0);
     setCountdown(0);
@@ -314,18 +423,34 @@ const ChineseFoodFlashcards = () => {
     setShowAnswer(false);
   };
 
+
   const resetCards = () => {
-    setCards(allCards);
+    setIsGameMode(false);
+    setCountdown(0);
+    setGameOrder([]);
+    setGamePosition(0);
+  
+    const filtered = selectedUnit
+      ? allCards.filter(c => String(c.unitNumber) === String(selectedUnit))
+      : allCards;
+  
+    setCards(filtered);
+    setMasteredKeys([]);
     setCurrentCard(0);
     setShowAnswer(false);
-    setIsGameMode(false);
+  
     if (timerId) {
       clearInterval(timerId);
       setTimerId(null);
     }
     setElapsedMs(0);
     setFinalTimeMs(null);
+  
+    if (currentKid) {
+      updateURL(currentKid, filtered);
+    }
   };
+  
 
   const handleAddWord = async () => {
     if (!newWord.trim()) {
@@ -346,16 +471,10 @@ const ChineseFoodFlashcards = () => {
         return;
       }
       
-      // Add to current kid's deck
       setCards(prevCards => [...prevCards, translation]);
       
-      // If "Add for both" is checked, also add to the other kid's deck
       if (addForBoth) {
         const otherKid = currentKid === 'sophie' ? 'joyce' : 'sophie';
-        const urlParams = new URLSearchParams(window.location.search);
-        
-        // Try to get the other kid's data from a stored link if available
-        // For now, we'll just show a message
         setError(`Word added to ${currentKid === 'sophie' ? "小潔's" : "文文's"} deck! To add to ${otherKid === 'sophie' ? "小潔's" : "文文's"} deck, switch profiles and add it there.`);
       } else {
         setError('Word added successfully!');
@@ -415,21 +534,25 @@ const ChineseFoodFlashcards = () => {
     if (!current) return;
     const id = current.simplified;
 
-    // Track as mastered (idempotent)
-    setMasteredKeys(prev => (prev.includes(id) ? prev : [...prev, id]));
+    // Update mastered keys and save to DB
+    setMasteredKeys(prev => {
+      const updated = prev.includes(id) ? prev : [...prev, id];
+      if (currentKid) {
+        saveMastered(currentKid, id, current.unitNumber);
+        checkLessonCompletion(currentKid, updated, current.unitNumber);
+      }
+      return updated;
+    });
 
     if (isGameMode) {
       if (gameOrder.length === 0) return;
       const currentIndex = currentCard;
-      // Remove current card index from gameOrder
       setGameOrder((order) => {
         const idxInOrder = order.indexOf(currentIndex);
         const newOrder = order.filter((i) => i !== currentIndex);
         if (newOrder.length === 0) {
-          // Game finished
           endTimedGame(elapsedMs);
         } else {
-          // Move to next available position
           const nextPos = idxInOrder % newOrder.length;
           setGamePosition(nextPos);
           setCurrentCard(newOrder[nextPos]);
@@ -472,8 +595,19 @@ const ChineseFoodFlashcards = () => {
   const timerDisplay = (isGameMode || countdown > 0) ? `${(elapsedMs/1000).toFixed(1)}s` : (finalTimeMs !== null ? `${(finalTimeMs/1000).toFixed(1)}s` : '');
   const progress = ((currentCard + 1) / cards.length) * 100;
 
+  const headerTitle = React.useMemo(() => {
+    if (selectedUnit) {
+      const unitCards = allCards.filter(card => card.unitNumber === selectedUnit);
+      const unitName = unitCards[0]?.unitName || `Unit ${selectedUnit}`;
+      return `Unit ${selectedUnit}: ${unitName} (${unitCards.length} Cards)`;
+    }
+    return `All Units (${cards.length} Cards)`;
+  }, [selectedUnit, allCards, cards.length]);
+
   // Show kid selector screen
   if (showKidSelector || !currentKid) {
+    const availableUnits = getAvailableUnits();
+    
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-rose-50 flex items-center justify-center p-4">
         <div className="max-w-md w-full">
@@ -484,7 +618,31 @@ const ChineseFoodFlashcards = () => {
             <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent mb-2">
               Chinese Flashcards
             </h1>
-            <p className="text-slate-500">Select your profile to start learning</p>
+            <p className="text-slate-500">Select your profile and unit to start learning</p>
+          </div>
+
+          {/* Unit Selector */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-slate-700 mb-3">
+              Choose Unit
+            </label>
+            <select
+              value={selectedUnit}
+              onChange={(e) => setSelectedUnit(e.target.value)}
+              className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-rose-500 outline-none text-lg bg-white"
+            >
+              <option value="">All Units</option>
+              {availableUnits.map(unit => {
+                const unitCards = allCards.filter(card => card.unitNumber === unit);
+                const unitName = unitCards[0]?.unitName || `Unit ${unit}`;
+                const sophieComplete = completedLessons.includes(String(unit));
+                return (
+                  <option key={unit} value={unit}>
+                    Unit {unit}: {unitName} ({unitCards.length} cards)
+                  </option>
+                );
+              })}
+            </select>
           </div>
 
           <div className="space-y-4">
@@ -519,38 +677,36 @@ const ChineseFoodFlashcards = () => {
 
           {/* Leaderboard */}
           <div className="mt-8 bg-white/70 backdrop-blur rounded-2xl border border-slate-200 p-4">
-            <h4 className="text-slate-700 font-semibold mb-3 flex items-center gap-2"><Trophy className="w-4 h-4 text-amber-500" /> Top Times</h4>
+            <h4 className="text-slate-700 font-semibold mb-3 flex items-center gap-2">
+              <Trophy className="w-4 h-4 text-amber-500" />
+              Top Times {selectedUnit ? `(Unit ${selectedUnit})` : `(All Units)`}
+            </h4>
+
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <p className="text-slate-500 font-medium mb-1">小潔</p>
-                {getLeaderboard('sophie').length === 0 ? (
-                  <p className="text-slate-400">No times yet</p>
-                ) : (
-                  <ol className="list-decimal list-inside text-slate-700 space-y-1">
-                    {getLeaderboard('sophie').map((t, i) => (
-                      <li key={i}>{formatMs(t)}</li>
-                    ))}
-                  </ol>
-                )}
+                {(() => {
+                  const best = getLeaderboard('sophie', selectedUnit || 'all');
+                  return best === null ? (
+                    <p className="text-slate-400">No times yet</p>
+                  ) : (
+                    <p className="text-slate-700 font-medium">Best: {formatMs(best)}</p>
+                  );
+                })()}
               </div>
               <div>
                 <p className="text-slate-500 font-medium mb-1">文文</p>
-                {getLeaderboard('joyce').length === 0 ? (
-                  <p className="text-slate-400">No times yet</p>
-                ) : (
-                  <ol className="list-decimal list-inside text-slate-700 space-y-1">
-                    {getLeaderboard('joyce').map((t, i) => (
-                      <li key={i}>{formatMs(t)}</li>
-                    ))}
-                  </ol>
-                )}
+                {(() => {
+                  const best = getLeaderboard('joyce', selectedUnit || 'all');
+                  return best === null ? (
+                    <p className="text-slate-400">No times yet</p>
+                  ) : (
+                    <p className="text-slate-700 font-medium">Best: {formatMs(best)}</p>
+                  );
+                })()}
               </div>
             </div>
           </div>
-
-          <p className="text-center text-sm text-slate-500 mt-8">
-            Your progress is saved in your personal link
-          </p>
         </div>
       </div>
     );
@@ -564,21 +720,61 @@ const ChineseFoodFlashcards = () => {
             <Coffee className="w-8 h-8 text-white" />
           </div>
           <div>
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
-              Chinese Food Vocabulary
-            </h1>
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
+            {headerTitle}
+          </h1>
             <div className="flex items-center justify-center gap-2 mt-1">
-            <p className="text-slate-500">Database: {allCards.length} words</p>
               <span className="text-slate-300">•</span>
-              <button onClick={switchKid} className="text-blue-500 hover:text-blue-600 font-medium flex items-center gap-1">
-                <User className="w-4 h-4" />
-                {currentKid === 'sophie' ? '小潔' : '文文'}
-              </button>
+              <div ref={kidMenuRef} className="relative">
+                <button
+                  onClick={() => setShowKidMenu((s) => !s)}
+                  className="text-blue-500 hover:text-blue-600 font-medium flex items-center gap-1"
+                >
+                  <User className="w-4 h-4" />
+                  {currentKid === 'sophie' ? '小潔' : '文文'}
+                </button>
+
+                {showKidMenu && (
+                  <div className="absolute left-0 mt-2 w-40 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
+                    <button
+                      onClick={() => { changeKid('sophie'); setShowKidMenu(false); }}
+                      className="w-full text-left px-3 py-2 hover:bg-slate-50"
+                    >
+                      小潔
+                    </button>
+                    <button
+                      onClick={() => { changeKid('joyce'); setShowKidMenu(false); }}
+                      className="w-full text-left px-3 py-2 hover:bg-slate-50"
+                    >
+                      文文
+                    </button>
+
+                    <div className="h-px bg-slate-200" />
+                    <button
+                      onClick={() => { setShowKidMenu(false); switchKid(); }}
+                      className="w-full text-left px-3 py-2 text-slate-600 hover:bg-slate-50"
+                    >
+                      Change Unit…
+                    </button>
+                  </div>
+                )}
+              </div>
               <span className="text-slate-300">•</span>
-              <button onClick={() => setShowLinkModal(true)} className="text-emerald-500 hover:text-emerald-600 font-medium flex items-center gap-1">
-                <Link className="w-4 h-4" />
-                Save Link
-              </button>
+
+              {/* Mastered / Lesson progress indicator */}
+              <span className="text-slate-500 text-sm flex items-center gap-1">
+                <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                {masteredKeys.length} mastered
+              </span>
+              {completedLessons.length > 0 && (
+                <>
+                  <span className="text-slate-300">•</span>
+                  <span className="text-slate-500 text-sm flex items-center gap-1">
+                    <Trophy className="w-3.5 h-3.5 text-amber-500" />
+                    {completedLessons.length} {completedLessons.length === 1 ? 'lesson' : 'lessons'} done
+                  </span>
+                </>
+              )}
             </div>
           </div>
           {(isGameMode || countdown > 0 || finalTimeMs !== null) && (
@@ -630,13 +826,18 @@ const ChineseFoodFlashcards = () => {
                 </div>
                 <div className="text-center p-8 text-white z-10">
                   <div className="inline-block px-4 py-2 bg-white bg-opacity-20 backdrop-blur-sm rounded-full text-sm font-medium mb-6">Chinese Characters</div>
+                  {card && masteredKeys.includes(card.simplified) && (
+                    <div className="inline-block ml-2 px-2 py-1 bg-emerald-400/30 rounded-full text-xs font-medium mb-4">
+                      ✓ Mastered
+                    </div>
+                  )}
                   <div className="mb-8">
                     <p className="text-rose-100 text-lg font-medium mb-3">Simplified</p>
-                    <h3 className="text-7xl font-bold leading-none drop-shadow-lg mb-2">{card.simplified}</h3>
+                    <h3 className="text-7xl font-bold leading-none drop-shadow-lg mb-2">{card?.simplified}</h3>
                   </div>
                   <div className="pt-6 border-t border-rose-400 border-opacity-30">
                     <p className="text-rose-100 text-lg font-medium mb-3">Traditional</p>
-                    <p className="text-5xl font-bold drop-shadow-lg">{card.traditional}</p>
+                    <p className="text-5xl font-bold drop-shadow-lg">{card?.traditional}</p>
                   </div>
                   <p className="text-rose-100 text-lg font-medium mt-6">Tap to see pinyin</p>
                 </div>
@@ -648,9 +849,9 @@ const ChineseFoodFlashcards = () => {
                 <div className="absolute top-4 right-4 opacity-10"><Star className="w-12 h-12 text-white" /></div>
                 <div className="text-center p-8 z-10 text-white">
                   <div className="inline-block px-4 py-2 bg-white bg-opacity-20 backdrop-blur-sm rounded-full text-sm font-medium mb-6">Pinyin + English</div>
-                  <h3 className="text-6xl font-bold leading-tight drop-shadow-lg mb-4">{card.pinyin}</h3>
+                  <h3 className="text-6xl font-bold leading-tight drop-shadow-lg mb-4">{card?.pinyin}</h3>
                   <div className="pt-4 border-t border-white border-opacity-30">
-                    <p className="text-blue-100 text-2xl font-semibold">{card.english}</p>
+                    <p className="text-blue-100 text-2xl font-semibold">{card?.english}</p>
                   </div>
                 </div>
               </div>
@@ -694,7 +895,7 @@ const ChineseFoodFlashcards = () => {
             <button
               onClick={handleMarkAsMastered}
               disabled={cards.length <= 1}
-              className="bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 text-white px-6 py-3 rounded-xl font-medium shadow-md hover:shadow-lg border border-indigo-400/40 flex items-center gap-2"
+              className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 disabled:opacity-50 text-white px-6 py-3 rounded-xl font-medium shadow-md hover:shadow-lg border border-emerald-400/40 flex items-center gap-2"
             >
               <CheckCircle className="w-4 h-4" />
               Mastered
@@ -702,6 +903,18 @@ const ChineseFoodFlashcards = () => {
           </div>
         </div>
 
+        {error && (
+          <div className={`max-w-md mx-auto mb-4 flex items-center gap-2 p-3 rounded-xl text-sm ${
+            error.includes('mastered') || error.includes('success') || error.includes('copied') || error.includes('completed') || error.includes('🎉')
+              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+              : 'bg-red-50 text-red-700 border border-red-200'
+          }`}>
+            {error.includes('mastered') || error.includes('success') || error.includes('copied') || error.includes('completed') || error.includes('🎉')
+              ? <Check className="w-4 h-4 flex-shrink-0" />
+              : <AlertCircle className="w-4 h-4 flex-shrink-0" />}
+            {error}
+          </div>
+        )}
 
         {showAddForm && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -732,8 +945,6 @@ const ChineseFoodFlashcards = () => {
                     (You'll need to switch profiles and add it manually for now)
                   </p>
                 </div>
-                
-                {error && <div className={`flex items-center gap-2 mt-3 text-sm ${error.includes('success') ? 'text-emerald-600' : 'text-red-600'}`}>{error.includes('success') ? <Check className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}{error}</div>}
               </div>
               <div className="flex gap-3">
                 <button onClick={() => { setShowAddForm(false); setNewWord(''); setError(''); }} className="flex-1 px-6 py-3 border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50">Cancel</button>
@@ -797,7 +1008,7 @@ const ChineseFoodFlashcards = () => {
 
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
                   <p className="text-sm text-blue-800">
-                    <strong>📱 How to use:</strong>
+                    <strong>How to use:</strong>
                   </p>
                   <ul className="text-sm text-blue-700 mt-2 space-y-1 list-disc list-inside">
                     <li>Bookmark this page on each iPad</li>
@@ -823,4 +1034,3 @@ const ChineseFoodFlashcards = () => {
 };
 
 export default ChineseFoodFlashcards;
-
