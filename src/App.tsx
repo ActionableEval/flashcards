@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, RotateCcw, Shuffle, Star, Coffee, Plus, X, Check, AlertCircle, CheckCircle, User, Link, Copy, Trophy, Clock, Users, LogOut, Settings, Pencil } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RotateCcw, Shuffle, Star, Coffee, Plus, X, Check, AlertCircle, CheckCircle, User, Link, Copy, Trophy, Clock, Users, LogOut, Settings, Pencil, LayoutDashboard } from 'lucide-react';
 import UserLogin from './UserLogin';
 import TeamSelector from './TeamSelector';
 import TeamManager from './TeamManager';
 import ProfileEditor, { Avatar } from './ProfileEditor';
+import Dashboard from './Dashboard';
 
 interface UserData {
   id: number;
@@ -22,8 +23,8 @@ interface Team {
 
 const ChineseFoodFlashcards = () => {
   // ─── App screen state ─────────────────────────────────────────────
-  // 'login' | 'team' | 'app'
-  const [screen, setScreen] = useState<'login' | 'team' | 'app'>('login');
+  // 'login' | 'team' | 'dashboard' | 'app'
+  const [screen, setScreen] = useState<'login' | 'team' | 'dashboard' | 'app'>('login');
   const [currentUser, setCurrentUser] = useState<UserData | null>(null);
   const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
   const [showTeamManager, setShowTeamManager] = useState(false);
@@ -133,12 +134,12 @@ const ChineseFoodFlashcards = () => {
     }
   };
 
-  const saveCompletedLesson = async (username: string, unit_number: string, unit_name: string) => {
+  const saveCompletedLesson = async (username: string, unit_number: string, unit_name: string, time_ms?: number) => {
     try {
       await fetch('/api/lessons', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kid: username, unit_number, unit_name }),
+        body: JSON.stringify({ kid: username, unit_number, unit_name, time_ms: time_ms ?? null }),
       });
       setCompletedLessons(prev => prev.includes(unit_number) ? prev : [...prev, unit_number]);
     } catch (e) {
@@ -146,14 +147,14 @@ const ChineseFoodFlashcards = () => {
     }
   };
 
-  const checkLessonCompletion = (username: string, newMasteredKeys: string[], unitNumber: string) => {
+  const checkLessonCompletion = (username: string, newMasteredKeys: string[], unitNumber: string, time_ms?: number) => {
     if (!unitNumber) return;
     const unitCards = allCards.filter(c => String(c.unitNumber) === String(unitNumber));
     if (unitCards.length === 0) return;
     const allMastered = unitCards.every(c => newMasteredKeys.includes(c.simplified));
     if (allMastered && !completedLessons.includes(String(unitNumber))) {
       const unitName = unitCards[0]?.unitName || `Unit ${unitNumber}`;
-      saveCompletedLesson(username, String(unitNumber), unitName);
+      saveCompletedLesson(username, String(unitNumber), unitName, time_ms);
       setError(`🎉 Unit ${unitNumber}: ${unitName} completed!`);
       setTimeout(() => setError(''), 4000);
     }
@@ -167,14 +168,24 @@ const ChineseFoodFlashcards = () => {
 
   const handleTeamSelect = (team: Team | null) => {
     setCurrentTeam(team);
+    setScreen('dashboard');
+    if (currentUser) loadProgress(currentUser.username);
+  };
+
+  const handleStartLesson = (units: string[], _label?: string) => {
+    const filtered = units.length === 0
+      ? allCards
+      : units.length === 1
+        ? allCards.filter(c => String(c.unitNumber) === String(units[0]))
+        : allCards.filter(c => units.map(String).includes(String(c.unitNumber)));
+    setSelectedUnit(units.length === 1 ? units[0] : '');
+    setCards(filtered);
+    setCurrentCard(0);
+    setShowAnswer(false);
+    setIsGameMode(false);
+    setGameOrder([]);
+    setFinalTimeMs(null);
     setScreen('app');
-    if (currentUser) {
-      const filtered = selectedUnit
-        ? allCards.filter(c => String(c.unitNumber) === String(selectedUnit))
-        : allCards;
-      setCards(filtered);
-      loadProgress(currentUser.username);
-    }
   };
 
   const handleLogout = () => {
@@ -341,7 +352,7 @@ const ChineseFoodFlashcards = () => {
       const updated = prev.includes(id) ? prev : [...prev, id];
       if (currentUser) {
         saveMastered(currentUser.username, id, current.unitNumber);
-        checkLessonCompletion(currentUser.username, updated, current.unitNumber);
+        checkLessonCompletion(currentUser.username, updated, current.unitNumber, isGameMode ? elapsedMs : undefined);
       }
       return updated;
     });
@@ -436,7 +447,39 @@ const ChineseFoodFlashcards = () => {
     return <TeamSelector user={currentUser!} onSelect={handleTeamSelect} />;
   }
 
-  // ─── Main app ─────────────────────────────────────────────────────
+  if (screen === 'dashboard') {
+    return (
+      <>
+        <Dashboard
+          user={currentUser!}
+          team={currentTeam}
+          allCards={allCards}
+          onStartLesson={handleStartLesson}
+          onEditProfile={() => setShowProfileEditor(true)}
+          onSwitchTeam={() => setScreen('team')}
+          onManageTeam={() => setShowTeamManager(true)}
+          onLogout={handleLogout}
+        />
+        {showTeamManager && currentUser && currentTeam && (
+          <TeamManager
+            user={currentUser}
+            team={currentTeam}
+            onClose={() => setShowTeamManager(false)}
+            onLeave={handleTeamLeave}
+          />
+        )}
+        {showProfileEditor && currentUser && (
+          <ProfileEditor
+            user={currentUser}
+            onClose={() => setShowProfileEditor(false)}
+            onUpdate={(updated) => setCurrentUser(updated)}
+          />
+        )}
+      </>
+    );
+  }
+
+  // ─── Main app (flashcard study) ───────────────────────────────────
   const availableUnits = getAvailableUnits();
 
   return (
@@ -444,8 +487,15 @@ const ChineseFoodFlashcards = () => {
       {/* Header */}
       <div className="max-w-4xl mx-auto mb-6">
         <div className="flex items-center justify-between">
-          {/* Left: logo + title */}
+          {/* Left: back button + logo + title */}
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setScreen('dashboard')}
+              className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 px-2.5 py-1.5 rounded-xl transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <LayoutDashboard className="w-3.5 h-3.5" />
+            </button>
             <div className="bg-gradient-to-r from-rose-500 to-pink-500 p-2.5 rounded-2xl shadow-lg">
               <Coffee className="w-6 h-6 text-white" />
             </div>

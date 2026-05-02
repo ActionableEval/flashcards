@@ -361,12 +361,19 @@ app.get('/api/lessons/:kid', async (req, res) => {
 
 app.post('/api/lessons', async (req, res) => {
   try {
-    const { kid, unit_number, unit_name } = req.body;
+    const { kid, unit_number, unit_name, time_ms } = req.body;
     if (!kid || !unit_number) return res.status(400).json({ error: 'kid and unit_number are required' });
     await pool.query(
-      `INSERT INTO completed_lessons (kid, unit_number, unit_name) VALUES ($1, $2, $3)
-       ON CONFLICT (kid, unit_number) DO UPDATE SET completed_at = NOW(), unit_name = $3`,
-      [kid, unit_number, unit_name || null]
+      `INSERT INTO completed_lessons (kid, unit_number, unit_name, time_ms) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (kid, unit_number) DO UPDATE SET
+         completed_at = NOW(),
+         unit_name = $3,
+         time_ms = CASE
+           WHEN EXCLUDED.time_ms IS NULL THEN completed_lessons.time_ms
+           WHEN completed_lessons.time_ms IS NULL THEN EXCLUDED.time_ms
+           ELSE LEAST(EXCLUDED.time_ms, completed_lessons.time_ms)
+         END`,
+      [kid, unit_number, unit_name || null, time_ms ?? null]
     );
     res.json({ success: true });
   } catch (err) {
@@ -395,11 +402,36 @@ app.get('/api/progress/:kid', async (req, res) => {
   try {
     const [mastered, lessons] = await Promise.all([
       pool.query('SELECT simplified, unit_number, mastered_at FROM mastered_cards WHERE kid = $1', [req.params.kid]),
-      pool.query('SELECT unit_number, unit_name, completed_at FROM completed_lessons WHERE kid = $1', [req.params.kid]),
+      pool.query('SELECT unit_number, unit_name, completed_at, time_ms FROM completed_lessons WHERE kid = $1', [req.params.kid]),
     ]);
     res.json({ masteredCards: mastered.rows, completedLessons: lessons.rows });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch progress' });
+  }
+});
+
+// ─── Team Lesson Records (top 2 per lesson) ───────────────────────
+app.get('/api/teams/:teamId/lesson-records', async (req, res) => {
+  try {
+    const teamId = parseInt(req.params.teamId);
+    const result = await pool.query(`
+      WITH ranked AS (
+        SELECT
+          cl.unit_number, cl.unit_name, cl.time_ms,
+          u.display_name, u.avatar_url, u.username,
+          ROW_NUMBER() OVER (PARTITION BY cl.unit_number ORDER BY cl.time_ms ASC) AS rn
+        FROM completed_lessons cl
+        JOIN users u ON u.username = cl.kid
+        JOIN team_members tm ON tm.user_id = u.id
+        WHERE tm.team_id = $1 AND tm.status = 'approved' AND cl.time_ms IS NOT NULL
+      )
+      SELECT * FROM ranked WHERE rn <= 2
+      ORDER BY unit_number, rn
+    `, [teamId]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
