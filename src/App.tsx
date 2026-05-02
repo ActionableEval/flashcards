@@ -47,6 +47,7 @@ const ChineseFoodFlashcards = () => {
   const [masteredKeys, setMasteredKeys] = useState<string[]>([]);
   const [completedLessons, setCompletedLessons] = useState<string[]>([]);
   const [overlayDismissed, setOverlayDismissed] = useState(false);
+  const [lessonJustCompleted, setLessonJustCompleted] = useState(false);
 
   // User/unit menu
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -155,9 +156,8 @@ const ChineseFoodFlashcards = () => {
     const allMastered = unitCards.every(c => newMasteredKeys.includes(c.simplified));
     if (allMastered && !completedLessons.includes(String(unitNumber))) {
       const unitName = unitCards[0]?.unitName || `Unit ${unitNumber}`;
+      setLessonJustCompleted(true);
       saveCompletedLesson(username, String(unitNumber), unitName, time_ms);
-      setError(`🎉 Unit ${unitNumber}: ${unitName} completed!`);
-      setTimeout(() => setError(''), 4000);
     }
   };
 
@@ -189,6 +189,7 @@ const ChineseFoodFlashcards = () => {
     setGameOrder([]);
     setFinalTimeMs(null);
     setOverlayDismissed(false);
+    setLessonJustCompleted(false);
     setScreen('app');
   };
 
@@ -300,6 +301,7 @@ const ChineseFoodFlashcards = () => {
     setCards(filtered);
     setMasteredKeys([]);
     setOverlayDismissed(false);
+    setLessonJustCompleted(false);
     if (selectedUnit) {
       setCompletedLessons(prev => prev.filter(u => u !== selectedUnit));
       if (currentUser) {
@@ -638,7 +640,7 @@ const ChineseFoodFlashcards = () => {
                 <div className="text-white text-6xl font-bold">{countdown}</div>
               </div>
             )}
-            {selectedUnit && completedLessons.includes(selectedUnit) && finalTimeMs === null && !overlayDismissed && (
+            {selectedUnit && lessonJustCompleted && finalTimeMs === null && !overlayDismissed && (
               <div className="absolute inset-0 bg-emerald-600/90 z-20 flex flex-col items-center justify-center rounded-3xl gap-3 p-6" onClick={e => e.stopPropagation()}>
                 <div className="text-5xl">🏆</div>
                 <p className="text-white font-bold text-xl">Lesson Complete!</p>
