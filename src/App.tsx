@@ -46,7 +46,6 @@ const ChineseFoodFlashcards = () => {
   // Mastery & lesson tracking
   const [masteredKeys, setMasteredKeys] = useState<string[]>([]);
   const [completedLessons, setCompletedLessons] = useState<string[]>([]);
-  const [overlayDismissed, setOverlayDismissed] = useState(false);
   const [lessonJustCompleted, setLessonJustCompleted] = useState(false);
 
   // User/unit menu
@@ -149,18 +148,6 @@ const ChineseFoodFlashcards = () => {
     }
   };
 
-  const checkLessonCompletion = (username: string, newMasteredKeys: string[], unitNumber: string, time_ms?: number) => {
-    if (!unitNumber) return;
-    const unitCards = allCards.filter(c => String(c.unitNumber) === String(unitNumber));
-    if (unitCards.length === 0) return;
-    const allMastered = unitCards.every(c => newMasteredKeys.includes(c.simplified));
-    if (allMastered) {
-      const unitName = unitCards[0]?.unitName || `Unit ${unitNumber}`;
-      setLessonJustCompleted(true);
-      saveCompletedLesson(username, String(unitNumber), unitName, time_ms);
-    }
-  };
-
   // ─── User / Team flow ─────────────────────────────────────────────
   const handleLogin = async (user: UserData) => {
     setCurrentUser(user);
@@ -188,7 +175,6 @@ const ChineseFoodFlashcards = () => {
     setIsGameMode(false);
     setGameOrder([]);
     setFinalTimeMs(null);
-    setOverlayDismissed(false);
     setLessonJustCompleted(false);
     setScreen('app');
   };
@@ -300,7 +286,6 @@ const ChineseFoodFlashcards = () => {
       : allCards;
     setCards(filtered);
     setMasteredKeys([]);
-    setOverlayDismissed(false);
     setLessonJustCompleted(false);
     if (selectedUnit) {
       setCompletedLessons(prev => prev.filter(u => u !== selectedUnit));
@@ -583,7 +568,7 @@ const ChineseFoodFlashcards = () => {
                   </div>
 
                   <button
-                    onClick={() => { setScreen('team'); setShowUserMenu(false); }}
+                    onClick={() => { setScreen('dashboard'); setShowUserMenu(false); }}
                     className="w-full text-left px-3 py-2.5 hover:bg-slate-50 flex items-center gap-2 text-sm text-slate-700"
                   >
                     <Users className="w-4 h-4 text-slate-400" />
@@ -646,7 +631,7 @@ const ChineseFoodFlashcards = () => {
                 <div className="text-white text-6xl font-bold">{countdown}</div>
               </div>
             )}
-            {selectedUnit && lessonJustCompleted && finalTimeMs === null && !overlayDismissed && (
+            {selectedUnit && lessonJustCompleted && finalTimeMs === null && (
               <div className="absolute inset-0 bg-emerald-600/90 z-20 flex flex-col items-center justify-center rounded-3xl gap-3 p-6" onClick={e => e.stopPropagation()}>
                 <div className="text-5xl">🏆</div>
                 <p className="text-white font-bold text-xl">Lesson Complete!</p>
@@ -659,7 +644,7 @@ const ChineseFoodFlashcards = () => {
                     <LayoutDashboard className="w-4 h-4" /> Back to Dashboard
                   </button>
                   <button
-                    onClick={() => { setOverlayDismissed(true); resetCards(); }}
+                    onClick={resetCards}
                     className="flex items-center justify-center gap-2 bg-emerald-500/60 hover:bg-emerald-500/80 text-white font-semibold px-6 py-2.5 rounded-2xl transition-colors text-sm w-full"
                   >
                     <RotateCcw className="w-4 h-4" /> Restart
@@ -667,7 +652,7 @@ const ChineseFoodFlashcards = () => {
                 </div>
               </div>
             )}
-            {finalTimeMs !== null && !isGameMode && !overlayDismissed && (
+            {finalTimeMs !== null && !isGameMode && (
               <div className="absolute inset-0 bg-black/60 z-20 flex flex-col items-center justify-center rounded-3xl gap-3 p-6" onClick={e => e.stopPropagation()}>
                 <div className="text-5xl">🎉</div>
                 <div className="text-white text-3xl font-bold">{formatMs(finalTimeMs)}</div>
@@ -680,7 +665,7 @@ const ChineseFoodFlashcards = () => {
                     <LayoutDashboard className="w-4 h-4" /> Back to Dashboard
                   </button>
                   <button
-                    onClick={() => { setOverlayDismissed(true); resetCards(); }}
+                    onClick={resetCards}
                     className="flex items-center justify-center gap-2 bg-white/20 hover:bg-white/30 text-white font-semibold px-6 py-2.5 rounded-2xl transition-colors text-sm w-full"
                   >
                     <RotateCcw className="w-4 h-4" /> Restart
@@ -763,7 +748,7 @@ const ChineseFoodFlashcards = () => {
           </button>
           <button
             onClick={handleMarkAsMastered}
-            disabled={cards.length <= 1}
+            disabled={cards.length === 0}
             className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl font-medium shadow-md flex items-center gap-2 text-sm"
           >
             <CheckCircle className="w-4 h-4" /> Mastered
