@@ -161,6 +161,20 @@ app.post('/api/users/:username/avatar', avatarUpload.single('avatar'), async (re
   }
 });
 
+// ─── Flashcards ───────────────────────────────────────────────────
+
+app.get('/api/flashcards', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT simplified, traditional, pinyin, english, unit_number AS "unitNumber", unit_name AS "unitName" FROM flashcards ORDER BY unit_number::int, id'
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ─── Teams ────────────────────────────────────────────────────────
 
 app.get('/api/teams', async (req, res) => {
