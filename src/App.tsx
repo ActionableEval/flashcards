@@ -58,6 +58,8 @@ const ChineseFoodFlashcards = () => {
   const [speechFeedback, setSpeechFeedback] = useState<'correct' | 'wrong' | null>(null);
   const [speakModeActive, setSpeakModeActive] = useState(false);
   const [lastHeard, setLastHeard] = useState('');
+  const [noSpeechCount, setNoSpeechCount] = useState(0);
+  const noSpeechCountRef = useRef(0);
   const speakModeRef = useRef(false);
   const recognitionRef = useRef<any>(null);
   const listenCallbackRef = useRef<(() => void) | null>(null);
@@ -403,6 +405,8 @@ const ChineseFoodFlashcards = () => {
 
   // ─── Mastery ──────────────────────────────────────────────────────
   const handleMarkAsMastered = () => {
+    noSpeechCountRef.current = 0;
+    setNoSpeechCount(0);
     const current = cards[currentCard];
     if (!current) return;
     const id = current.simplified;
@@ -493,11 +497,18 @@ const ChineseFoodFlashcards = () => {
     const len = simplified.length;
     let accepted = false; // prevent double-processing
 
+    // For interim results on 1-char words: accept any length (recognizer needs
+    // context, so user may say "冰水" and we catch "冰" mid-stream)
+    const checkMatchInterim = (transcripts: string[]): boolean => {
+      if (len !== 1) return false;
+      return transcripts.some(t => t && (t.includes(simplified) || t.includes(traditional)));
+    };
+
     const checkMatch = (transcripts: string[]): boolean => {
       return transcripts.some(t => {
         if (!t) return false;
         if (len === 1) {
-          // 1-char: accept if heard text contains the char and is short (≤3 chars)
+          // final result: accept if heard text contains the char and is short (≤3 chars)
           return (t.includes(simplified) || t.includes(traditional)) && t.length <= 3;
         }
         if (len === 2) {
@@ -512,6 +523,8 @@ const ChineseFoodFlashcards = () => {
     const accept = (bestHeard: string) => {
       if (accepted) return;
       accepted = true;
+      noSpeechCountRef.current = 0;
+      setNoSpeechCount(0);
       recognition.stop();
       setLastHeard(bestHeard);
       playSuccessSound();
@@ -543,18 +556,18 @@ const ChineseFoodFlashcards = () => {
 
       console.log(`[Speech] ${isFinal ? 'Final' : 'Interim'}:`, transcripts, '| Expected:', simplified);
 
-      // For single-char words, also try to match on interim results — the recognizer
-      // often never commits a final result for a single syllable, but interim works.
-      if (len === 1 && checkMatch(transcripts)) {
+      // For single-char words: check interim results with no length cap
+      // (recognizer may hear "冰水" while user says "冰" — we accept it mid-stream)
+      if (!isFinal && checkMatchInterim(transcripts)) {
         accept(bestHeard);
         return;
       }
 
-      // For longer words, only process final results
+      // Only process final results from here
       if (!isFinal) return;
 
       setLastHeard(bestHeard);
-      if (checkMatch(transcripts)) {
+      if (checkMatch(transcripts) || checkMatchInterim(transcripts)) {
         accept(bestHeard);
       } else {
         setSpeechFeedback('wrong');
@@ -565,14 +578,18 @@ const ChineseFoodFlashcards = () => {
     recognition.onerror = (event: any) => {
       console.log('[Speech] Error:', event.error);
       setIsListening(false);
-      const messages: Record<string, string> = {
-        'not-allowed': 'Microphone access denied — open the app in a full browser tab and allow mic permission.',
-        'no-speech': '',
-        'network': 'Network error — speech recognition needs an internet connection.',
-        'aborted': '',
-      };
-      const msg = messages[event.error] ?? `Mic error: ${event.error}`;
-      if (msg) { setError(msg); setTimeout(() => setError(''), 5000); }
+      if (event.error === 'no-speech') {
+        noSpeechCountRef.current += 1;
+        setNoSpeechCount(noSpeechCountRef.current);
+      } else {
+        const messages: Record<string, string> = {
+          'not-allowed': 'Microphone access denied — open the app in a full browser tab and allow mic permission.',
+          'network': 'Network error — speech recognition needs an internet connection.',
+          'aborted': '',
+        };
+        const msg = messages[event.error] ?? `Mic error: ${event.error}`;
+        if (msg) { setError(msg); setTimeout(() => setError(''), 5000); }
+      }
       // onend fires after onerror, which will restart if in auto mode
     };
 
@@ -984,6 +1001,14 @@ const ChineseFoodFlashcards = () => {
               : 'Auto'}
           </button>
         </div>
+
+        {/* No-speech hint for stubborn single-char cards */}
+        {noSpeechCount >= 3 && cards[currentCard]?.simplified.length === 1 && !lastHeard && (
+          <div className="max-w-md mx-auto mb-3 flex items-center justify-center gap-2 p-3 rounded-xl text-sm border bg-amber-50 text-amber-700 border-amber-200">
+            <span>💡</span>
+            <span>Try saying it in a short phrase, e.g. <strong>{cards[currentCard]?.simplified}水</strong> or <strong>{cards[currentCard]?.simplified}{cards[currentCard]?.simplified}</strong></span>
+          </div>
+        )}
 
         {/* Speech heard feedback */}
         {lastHeard && (
