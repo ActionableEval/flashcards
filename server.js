@@ -16,10 +16,10 @@ app.use(express.json());
 // Serve uploaded avatars statically
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Use Supabase DB in production (Render), fall back to Replit local DB in dev
+const databaseUrl = process.env.SUPABASE_DATABASE_URL || process.env.DATABASE_URL;
 const pool = new Pool({
-  connectionString: process.env.SUPABASE_DATABASE_URL || process.env.DATABASE_URL,
-  ssl: process.env.SUPABASE_DATABASE_URL ? { rejectUnauthorized: false } : false,
+  connectionString: databaseUrl,
+  ssl: databaseUrl?.includes('supabase') ? { rejectUnauthorized: false } : false,
 });
 
 // ─── Multer setup ─────────────────────────────────────────────────
@@ -89,6 +89,44 @@ app.post('/api/users/verify', async (req, res) => {
     const { email: _removed, ...safe } = user;
     res.json(safe);
   } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/users/sign-in-or-create', async (req, res) => {
+  try {
+    const { username, display_name, email } = req.body;
+    if (!username || !display_name || !email) return res.status(400).json({ error: 'username, display_name, and email are required' });
+    const trimmedUsername = username.trim().toLowerCase();
+    const trimmedEmail = email.trim().toLowerCase();
+    const existing = await pool.query(
+      'SELECT id, username, display_name, avatar_url, email, created_at FROM users WHERE username = $1',
+      [trimmedUsername]
+    );
+    if (existing.rows.length > 0) {
+      const user = existing.rows[0];
+      if (user.email && user.email !== trimmedEmail) return res.status(401).json({ error: 'Email does not match' });
+      if (!user.email) {
+        const updated = await pool.query(
+          'UPDATE users SET email = $1, display_name = COALESCE(display_name, $2) WHERE username = $3 RETURNING id, username, display_name, avatar_url, email, created_at',
+          [trimmedEmail, display_name.trim(), trimmedUsername]
+        );
+        return res.json(updated.rows[0]);
+      }
+      return res.json(user);
+    }
+    const created = await pool.query(
+      'INSERT INTO users (username, display_name, email) VALUES ($1, $2, $3) RETURNING id, username, display_name, avatar_url, email, created_at',
+      [trimmedUsername, display_name.trim(), trimmedEmail]
+    );
+    res.status(201).json(created.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') {
+      const detail = err.detail || '';
+      const message = detail.includes('email') ? 'Email already in use' : 'Username already taken';
+      return res.status(409).json({ error: message });
+    }
     console.error(err);
     res.status(500).json({ error: 'Server error' });
   }

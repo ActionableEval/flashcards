@@ -121,7 +121,7 @@ export default function UserLogin({ onLogin }: Props) {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/users', {
+      const res = await fetch('/api/users/sign-in-or-create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: trimmedUsername, display_name: displayName.trim(), email: trimmedEmail }),
