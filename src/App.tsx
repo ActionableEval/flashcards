@@ -551,17 +551,6 @@ const ChineseFoodFlashcards = () => {
     }
   };
 
-  const handleMicClick = () => {
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) {
-      setError('Speech recognition not supported — please use Chrome or Edge.');
-      setTimeout(() => setError(''), 5000);
-      return;
-    }
-    if (isListening) { recognitionRef.current?.stop(); return; }
-    startSingleListen(cards[currentCard]);
-  };
-
   const toggleSpeakMode = () => {
     if (speakModeActive) {
       speakModeRef.current = false;
@@ -941,21 +930,6 @@ const ChineseFoodFlashcards = () => {
             className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl font-medium shadow-md flex items-center gap-2 text-sm"
           >
             <CheckCircle className="w-4 h-4" /> Mastered
-          </button>
-          <button
-            onClick={handleMicClick}
-            disabled={cards.length === 0 || speakModeActive}
-            className={`relative disabled:opacity-50 text-white px-5 py-2.5 rounded-xl font-medium shadow-md flex items-center gap-2 text-sm transition-all ${
-              isListening && !speakModeActive
-                ? 'bg-red-500 hover:bg-red-600 animate-pulse'
-                : speechFeedback === 'correct' && !speakModeActive
-                ? 'bg-emerald-500'
-                : speechFeedback === 'wrong' && !speakModeActive
-                ? 'bg-rose-600'
-                : 'bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700'
-            }`}
-          >
-            <Mic className="w-4 h-4" /> Speak
           </button>
           <button
             onClick={toggleSpeakMode}
