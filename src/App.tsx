@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, RotateCcw, Shuffle, Star, Coffee, Plus, X, Check, AlertCircle, CheckCircle, User, Link, Copy, Trophy, Clock, Users, LogOut, Settings, Pencil, LayoutDashboard } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RotateCcw, Shuffle, Star, Coffee, Plus, X, Check, AlertCircle, CheckCircle, User, Link, Copy, Trophy, Clock, Users, LogOut, Settings, Pencil, LayoutDashboard, Mic, MicOff } from 'lucide-react';
 import UserLogin from './UserLogin';
 import TeamManager from './TeamManager';
 import ProfileEditor, { Avatar } from './ProfileEditor';
@@ -52,6 +52,11 @@ const ChineseFoodFlashcards = () => {
   // User/unit menu
   const [showUserMenu, setShowUserMenu] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
+
+  // Speech recognition
+  const [isListening, setIsListening] = useState(false);
+  const [speechFeedback, setSpeechFeedback] = useState<'correct' | 'wrong' | null>(null);
+  const recognitionRef = useRef<any>(null);
 
 
   // Timed game state
@@ -439,6 +444,65 @@ const ChineseFoodFlashcards = () => {
     }
   };
 
+  // ─── Speech recognition ───────────────────────────────────────────
+  const handleMicClick = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setError('Speech recognition is not supported in this browser. Try Chrome or Edge.');
+      return;
+    }
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+    const current = cards[currentCard];
+    if (!current) return;
+
+    const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
+    recognition.lang = 'zh-TW';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 5;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+
+    recognition.onresult = (event: any) => {
+      const results = Array.from(event.results[0]) as any[];
+      const heard = results.map((r: any) => r.transcript.trim()).join('');
+
+      const simplified = current.simplified.trim();
+      const traditional = current.traditional.trim();
+      const matched = results.some((r: any) => {
+        const t = r.transcript.trim();
+        return t === simplified || t === traditional ||
+               t.includes(simplified) || t.includes(traditional) ||
+               simplified.includes(t) || traditional.includes(t);
+      });
+
+      if (matched) {
+        setSpeechFeedback('correct');
+        setTimeout(() => setSpeechFeedback(null), 1500);
+        setTimeout(() => handleMarkAsMastered(), 400);
+      } else {
+        setSpeechFeedback('wrong');
+        setError(`Heard: "${heard}" — expected: "${simplified}" (${current.pinyin})`);
+        setTimeout(() => { setSpeechFeedback(null); setError(''); }, 3000);
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      setIsListening(false);
+      if (event.error !== 'no-speech' && event.error !== 'aborted') {
+        setError(`Mic error: ${event.error}`);
+        setTimeout(() => setError(''), 3000);
+      }
+    };
+
+    recognition.start();
+  };
+
   // ─── Unit selection applies immediately ───────────────────────────
   const applyUnit = (unit: string) => {
     setSelectedUnit(unit);
@@ -799,6 +863,22 @@ const ChineseFoodFlashcards = () => {
             className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl font-medium shadow-md flex items-center gap-2 text-sm"
           >
             <CheckCircle className="w-4 h-4" /> Mastered
+          </button>
+          <button
+            onClick={handleMicClick}
+            disabled={cards.length === 0}
+            className={`relative disabled:opacity-50 text-white px-5 py-2.5 rounded-xl font-medium shadow-md flex items-center gap-2 text-sm transition-all ${
+              isListening
+                ? 'bg-red-500 hover:bg-red-600 animate-pulse'
+                : speechFeedback === 'correct'
+                ? 'bg-emerald-500'
+                : speechFeedback === 'wrong'
+                ? 'bg-rose-600'
+                : 'bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700'
+            }`}
+          >
+            {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            {isListening ? 'Listening…' : speechFeedback === 'correct' ? '✓ Correct!' : speechFeedback === 'wrong' ? '✗ Try again' : 'Speak'}
           </button>
         </div>
 
