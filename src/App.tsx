@@ -484,43 +484,20 @@ const ChineseFoodFlashcards = () => {
     const recognition = new SR();
     recognitionRef.current = recognition;
     recognition.lang = 'zh-TW';
-    recognition.interimResults = false;
+    recognition.interimResults = true;   // catch partial results for single-char words
     recognition.maxAlternatives = 8;
     recognition.continuous = false;
 
-    recognition.onstart = () => {
-      console.log('[Speech] Listening for:', current.simplified);
-      setIsListening(true);
-    };
+    const simplified = current.simplified.trim();
+    const traditional = current.traditional.trim();
+    const len = simplified.length;
+    let accepted = false; // prevent double-processing
 
-    recognition.onend = () => {
-      setIsListening(false);
-      // In auto mode, restart for next card (card may have changed by now)
-      if (speakModeRef.current) {
-        setTimeout(() => listenCallbackRef.current?.(), 600);
-      }
-    };
-
-    recognition.onresult = (event: any) => {
-      const alternatives = Array.from(event.results[0]) as any[];
-      const transcripts = alternatives.map((r: any) => r.transcript.trim());
-      const bestHeard = transcripts[0] || '';
-      console.log('[Speech] Heard:', transcripts, '| Expected:', current.simplified);
-
-      const simplified = current.simplified.trim();
-      const traditional = current.traditional.trim();
-      setLastHeard(bestHeard);
-
-      // Matching strategy by word length:
-      // - 1 char: allow if recognized text contains target AND is ≤3 chars
-      //   (recognizer often doubles single chars e.g. "水"→"水水", or adds context "茶"→"绿茶")
-      // - 2 chars: exact match only (2-char words recognize reliably)
-      // - 3+ chars: allow substring in either direction
-      const len = simplified.length;
-      const matched = transcripts.some(t => {
+    const checkMatch = (transcripts: string[]): boolean => {
+      return transcripts.some(t => {
         if (!t) return false;
         if (len === 1) {
-          // accept if t contains the character and t is short (≤3 chars)
+          // 1-char: accept if heard text contains the char and is short (≤3 chars)
           return (t.includes(simplified) || t.includes(traditional)) && t.length <= 3;
         }
         if (len === 2) {
@@ -530,12 +507,55 @@ const ChineseFoodFlashcards = () => {
                t.includes(simplified) || t.includes(traditional) ||
                simplified.includes(t) || traditional.includes(t);
       });
+    };
 
-      if (matched) {
-        playSuccessSound();
-        setSpeechFeedback('correct');
-        setTimeout(() => { setSpeechFeedback(null); setLastHeard(''); }, 1800);
-        setTimeout(() => handleMarkAsMastered(), 400);
+    const accept = (bestHeard: string) => {
+      if (accepted) return;
+      accepted = true;
+      recognition.stop();
+      setLastHeard(bestHeard);
+      playSuccessSound();
+      setSpeechFeedback('correct');
+      setTimeout(() => { setSpeechFeedback(null); setLastHeard(''); }, 1800);
+      setTimeout(() => handleMarkAsMastered(), 400);
+    };
+
+    recognition.onstart = () => {
+      console.log('[Speech] Listening for:', simplified);
+      setIsListening(true);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+      if (speakModeRef.current) {
+        setTimeout(() => listenCallbackRef.current?.(), 600);
+      }
+    };
+
+    recognition.onresult = (event: any) => {
+      if (accepted) return;
+
+      const latest = event.results[event.resultIndex];
+      const isFinal = latest.isFinal;
+      const alternatives = Array.from(latest) as any[];
+      const transcripts = alternatives.map((r: any) => r.transcript.trim());
+      const bestHeard = transcripts[0] || '';
+
+      console.log(`[Speech] ${isFinal ? 'Final' : 'Interim'}:`, transcripts, '| Expected:', simplified);
+
+      // For single-char words, also try to match on interim results — the recognizer
+      // often never commits a final result for a single syllable, but interim works.
+      if (len === 1 && checkMatch(transcripts)) {
+        accept(bestHeard);
+        return;
+      }
+
+      // For longer words, only process final results
+      if (!isFinal) return;
+
+      setLastHeard(bestHeard);
+      if (checkMatch(transcripts)) {
+        accept(bestHeard);
       } else {
         setSpeechFeedback('wrong');
         setTimeout(() => { setSpeechFeedback(null); setLastHeard(''); }, 3000);
