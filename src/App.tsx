@@ -23,8 +23,9 @@ interface Team {
 const ChineseFoodFlashcards = () => {
   // ─── App screen state ─────────────────────────────────────────────
   // 'login' | 'dashboard' | 'app'
-  const [screen, setScreen] = useState<'login' | 'dashboard' | 'app'>('login');
-  const [currentUser, setCurrentUser] = useState<UserData | null>(null);
+  const savedUser = (() => { try { const s = localStorage.getItem('flashcards_user'); return s ? JSON.parse(s) as UserData : null; } catch { return null; } })();
+  const [screen, setScreen] = useState<'login' | 'dashboard' | 'app'>(savedUser ? 'dashboard' : 'login');
+  const [currentUser, setCurrentUser] = useState<UserData | null>(savedUser);
   const [userTeams, setUserTeams] = useState<Team[]>([]);
   const [managedTeam, setManagedTeam] = useState<Team | null>(null);
   const [showTeamManager, setShowTeamManager] = useState(false);
@@ -178,6 +179,7 @@ const ChineseFoodFlashcards = () => {
   // ─── User / Team flow ─────────────────────────────────────────────
   const handleLogin = async (user: UserData) => {
     setCurrentUser(user);
+    try { localStorage.setItem('flashcards_user', JSON.stringify(user)); } catch {}
     try {
       const res = await fetch(`/api/users/${user.id}/teams`);
       const teams = await res.json();
@@ -208,6 +210,7 @@ const ChineseFoodFlashcards = () => {
   };
 
   const handleLogout = () => {
+    try { localStorage.removeItem('flashcards_user'); } catch {}
     setCurrentUser(null);
     setUserTeams([]);
     setScreen('login');
