@@ -4,6 +4,7 @@
   -- ============================================================
 
   -- 1. SCHEMA
+
   CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     username TEXT UNIQUE NOT NULL,
@@ -44,22 +45,25 @@
 
   CREATE TABLE IF NOT EXISTS mastered_cards (
     id SERIAL PRIMARY KEY,
-    username TEXT NOT NULL,
+    kid TEXT NOT NULL,
     simplified TEXT NOT NULL,
     unit_number TEXT,
-    mastered_at TIMESTAMPTZ DEFAULT NOW()
+    mastered_at TIMESTAMPTZ DEFAULT NOW(),
+    user_id INTEGER
   );
 
   CREATE TABLE IF NOT EXISTS completed_lessons (
     id SERIAL PRIMARY KEY,
-    username TEXT NOT NULL,
-    unit_numbers TEXT,
-    time_ms INTEGER,
-    completed_at TIMESTAMPTZ DEFAULT NOW()
+    kid TEXT NOT NULL,
+    unit_number TEXT,
+    unit_name TEXT,
+    completed_at TIMESTAMPTZ DEFAULT NOW(),
+    user_id INTEGER,
+    time_ms INTEGER
   );
 
   -- 2. USERS
-INSERT INTO users (id, username, display_name, avatar_url, email, created_at) VALUES (1, 'bestkid', '小潔', '🐔', 'test@gmail.com', '2026-05-02 15:47:25.650273') ON CONFLICT (id) DO NOTHING;
+  INSERT INTO users (id, username, display_name, avatar_url, email, created_at) VALUES (1, 'bestkid', '小潔', '🐔', 'test@gmail.com', '2026-05-02 15:47:25.650273') ON CONFLICT (id) DO NOTHING;
 SELECT setval('users_id_seq', (SELECT MAX(id) FROM users));
 
 -- 3. TEAMS
@@ -211,12 +215,125 @@ INSERT INTO flashcards (id, simplified, traditional, pinyin, english, unit_numbe
 ON CONFLICT (id) DO NOTHING;
 SELECT setval('flashcards_id_seq', (SELECT MAX(id) FROM flashcards));
 
--- 6. MASTERED CARDS
-INSERT INTO mastered_cards (id, username, simplified, unit_number, mastered_at) VALUES (undefined, '', '', NULL, 'undefined') ON CONFLICT (id) DO NOTHING;
-INSERT INTO mastered_cards (id, username, simplified, unit_number, mastered_at) VALUES (undefined, '', '', NULL, 'undefined') ON CONFLICT (id) DO NOTHING;
+-- 6. MASTERED CARDS (109 rows)
+INSERT INTO mastered_cards (id, kid, simplified, unit_number, mastered_at, user_id) VALUES
+  (212, 'bestkid', '饺子', '1', '2026-05-02 21:09:24.282822', NULL),
+  (213, 'bestkid', '面条', '1', '2026-05-02 21:09:24.489979', NULL),
+  (214, 'bestkid', '面包', '1', '2026-05-02 21:09:24.684362', NULL),
+  (215, 'bestkid', '包子', '1', '2026-05-02 21:09:24.834782', NULL),
+  (216, 'bestkid', '猪肉', '1', '2026-05-02 21:09:24.919804', NULL),
+  (217, 'bestkid', '鱼肉', '1', '2026-05-02 21:09:26.485684', NULL),
+  (218, 'bestkid', '蔬菜', '1', '2026-05-02 21:09:26.624392', NULL),
+  (219, 'bestkid', '牛肉', '1', '2026-05-02 21:09:28.017609', NULL),
+  (220, 'bestkid', '鸡肉', '1', '2026-05-02 21:09:28.244916', NULL),
+  (221, 'bestkid', '红萝卜', '1', '2026-05-02 21:09:28.285239', NULL),
+  (222, 'bestkid', '鸡蛋', '1', '2026-05-02 21:09:28.497673', NULL),
+  (223, 'bestkid', '白菜', '1', '2026-05-02 21:09:28.649974', NULL),
+  (224, 'bestkid', '土豆', '1', '2026-05-02 21:09:30.1598', NULL),
+  (225, 'bestkid', '西瓜', '1', '2026-05-02 21:09:30.484213', NULL),
+  (226, 'bestkid', '番茄', '1', '2026-05-02 21:09:31.666016', NULL),
+  (227, 'bestkid', '苹果', '1', '2026-05-02 21:09:31.877465', NULL),
+  (228, 'bestkid', '香蕉', '1', '2026-05-02 21:09:31.921085', NULL),
+  (229, 'bestkid', '桔子', '1', '2026-05-02 21:09:32.061893', NULL),
+  (230, 'bestkid', '水', '1', '2026-05-02 21:09:32.119617', NULL),
+  (232, 'bestkid', '绿茶', '1', '2026-05-02 21:09:33.736748', NULL),
+  (233, 'bestkid', '咖啡', '1', '2026-05-02 21:09:34.001016', NULL),
+  (235, 'bestkid', '茶', '1', '2026-05-02 21:09:35.027157', NULL),
+  (238, 'bestkid', '牛奶', '1', '2026-05-02 21:09:35.629661', NULL),
+  (239, 'bestkid', '火锅', '1', '2026-05-02 21:09:36.291871', NULL),
+  (241, 'bestkid', '葡萄', '1', '2026-05-02 21:09:37.652011', NULL),
+  (243, 'bestkid', '炒饭', '1', '2026-05-02 21:09:38.685415', NULL),
+  (245, 'bestkid', '春卷', '1', '2026-05-02 21:09:39.687075', NULL),
+  (246, 'bestkid', '米饭', '1', '2026-05-02 21:10:26.80367', NULL),
+  (345, 'bestkid', '蛋饼', '1', '2026-05-02 22:35:14.184318', NULL),
+  (488, 'bestkid', '起司蛋吐司', '2', '2026-05-02 23:08:31.137315', NULL),
+  (489, 'bestkid', '火腿蛋吐司', '2', '2026-05-02 23:08:31.879778', NULL),
+  (490, 'bestkid', '玉米蛋吐司', '2', '2026-05-02 23:08:32.236904', NULL),
+  (491, 'bestkid', '肉松蛋吐司', '2', '2026-05-02 23:08:33.842798', NULL),
+  (492, 'bestkid', '培根蛋吐司', '2', '2026-05-02 23:08:34.035585', NULL),
+  (493, 'bestkid', '鲔魚蛋吐司', '2', '2026-05-02 23:08:35.167052', NULL),
+  (494, 'bestkid', '薯饼蛋吐司', '2', '2026-05-02 23:08:35.449633', NULL),
+  (495, 'bestkid', '猪排蛋吐司', '2', '2026-05-02 23:08:36.603821', NULL),
+  (496, 'bestkid', '熏鸡蛋吐司', '2', '2026-05-02 23:08:37.080685', NULL),
+  (497, 'bestkid', '香酥鸡蛋吐司', '2', '2026-05-02 23:08:38.557032', NULL),
+  (498, 'bestkid', '菲力鸡排蛋吐司', '2', '2026-05-02 23:08:38.786039', NULL),
+  (499, 'bestkid', '卡拉鸡腿蛋吐司', '2', '2026-05-02 23:08:39.725008', NULL),
+  (500, 'bestkid', '黄金虾排蛋吐司', '2', '2026-05-02 23:08:39.808493', NULL),
+  (501, 'bestkid', '原味蛋饼', '2', '2026-05-02 23:08:41.224464', NULL),
+  (502, 'bestkid', '起司蛋饼', '2', '2026-05-02 23:08:41.297703', NULL),
+  (503, 'bestkid', '玉米蛋饼', '2', '2026-05-02 23:08:43.319278', NULL),
+  (504, 'bestkid', '火腿蛋饼', '2', '2026-05-02 23:08:43.501103', NULL),
+  (505, 'bestkid', '热狗蛋饼', '2', '2026-05-02 23:08:43.958445', NULL),
+  (506, 'bestkid', '培根蛋饼', '2', '2026-05-02 23:08:44.449055', NULL),
+  (507, 'bestkid', '薯饼蛋饼', '2', '2026-05-02 23:08:45.477533', NULL),
+  (508, 'bestkid', '鲔魚蛋饼', '2', '2026-05-02 23:08:45.784039', NULL),
+  (509, 'bestkid', '熏鸡蛋饼', '2', '2026-05-02 23:08:47.650045', NULL),
+  (510, 'bestkid', '猪排蛋饼', '2', '2026-05-02 23:08:47.76804', NULL),
+  (511, 'bestkid', '原味抓饼', '2', '2026-05-02 23:08:48.504587', NULL),
+  (512, 'bestkid', '起司抓饼', '2', '2026-05-02 23:08:48.95326', NULL),
+  (513, 'bestkid', '玉米抓饼', '2', '2026-05-02 23:08:49.570701', NULL),
+  (514, 'bestkid', '火腿抓饼', '2', '2026-05-02 23:08:50.393991', NULL),
+  (515, 'bestkid', '鲔魚抓饼', '2', '2026-05-02 23:08:51.774479', NULL),
+  (516, 'bestkid', '培根抓饼', '2', '2026-05-02 23:08:52.383945', NULL),
+  (517, 'bestkid', '熏鸡抓饼', '2', '2026-05-02 23:08:53.055977', NULL),
+  (518, 'bestkid', '猪排抓饼', '2', '2026-05-02 23:22:33.348689', NULL),
+  (521, 'bestkid', '荷包蛋', '3', '2026-05-02 23:28:07.788443', NULL),
+  (522, 'bestkid', '葱餅', '3', '2026-05-02 23:28:09.054083', NULL),
+  (523, 'bestkid', '薯饼', '3', '2026-05-02 23:28:09.264794', NULL),
+  (524, 'bestkid', '热狗', '3', '2026-05-02 23:28:09.37875', NULL),
+  (525, 'bestkid', '薯条', '3', '2026-05-02 23:28:09.760014', NULL),
+  (526, 'bestkid', '萝卜糕', '3', '2026-05-02 23:28:10.67233', NULL),
+  (527, 'bestkid', '鸡塊', '3', '2026-05-02 23:28:10.87172', NULL),
+  (528, 'bestkid', '鲔魚起司总汇', '3', '2026-05-02 23:47:51.408946', NULL),
+  (529, 'bestkid', '起司猪排总汇', '3', '2026-05-02 23:47:52.573561', NULL),
+  (530, 'bestkid', '经典总汇', '3', '2026-05-02 23:47:53.295771', NULL),
+  (531, 'bestkid', '豪迈猪排总汇', '3', '2026-05-02 23:47:54.259086', NULL),
+  (532, 'bestkid', '卡拉鸡腿总汇', '3', '2026-05-02 23:47:54.333508', NULL),
+  (533, 'bestkid', '单点', '3', '2026-05-03 00:06:44.997748', NULL),
+  (534, 'bestkid', '蘑菇铁板面', '3', '2026-05-03 00:06:45.219571', NULL),
+  (535, 'bestkid', '黑胡椒铁板', '3', '2026-05-03 00:06:45.629582', NULL),
+  (536, 'bestkid', '内用', '3', '2026-05-03 00:06:45.789818', NULL),
+  (537, 'bestkid', '外带', '3', '2026-05-03 00:06:45.991497', NULL),
+  (538, 'bestkid', '加起司', '3', '2026-05-03 00:06:46.177725', NULL),
+  (539, 'bestkid', '加蛋', '3', '2026-05-03 00:06:49.697047', NULL),
+  (540, 'bestkid', '不要辣', '3', '2026-05-03 00:06:49.763174', NULL),
+  (541, 'bestkid', '不要香菜', '3', '2026-05-03 00:06:50.109824', NULL),
+  (542, 'bestkid', '少盐', '3', '2026-05-03 00:06:50.223121', NULL),
+  (576, 'bestkid', '冰', '4', '2026-05-03 00:36:34.445005', NULL),
+  (577, 'bestkid', '热', '4', '2026-05-03 00:36:35.10303', NULL),
+  (586, 'bestkid', '去冰', '4', '2026-05-03 01:25:49.089347', NULL),
+  (587, 'bestkid', '少冰', '4', '2026-05-03 01:26:02.666265', NULL),
+  (588, 'bestkid', '微糖', '4', '2026-05-03 01:26:06.699708', NULL),
+  (589, 'bestkid', '半糖', '4', '2026-05-03 01:26:08.747654', NULL),
+  (590, 'bestkid', '无糖', '4', '2026-05-03 01:26:11.950659', NULL),
+  (591, 'bestkid', '红茶', '4', '2026-05-03 01:26:14.374985', NULL),
+  (592, 'bestkid', '奶茶', '4', '2026-05-03 01:26:19.345162', NULL),
+  (593, 'bestkid', '豆浆', '4', '2026-05-03 01:26:50.75072', NULL),
+  (594, 'bestkid', '黑咖啡', '4', '2026-05-03 01:26:57.544007', NULL),
+  (595, 'bestkid', '鲜奶茶', '4', '2026-05-03 01:26:58.854585', NULL),
+  (656, 'bestkid', '冰拿铁', '4', '2026-05-03 01:40:21.200546', NULL),
+  (657, 'bestkid', '冬瓜茶', '4', '2026-05-03 01:40:23.845043', NULL),
+  (658, 'bestkid', '酸梅汤', '4', '2026-05-03 01:40:26.400089', NULL),
+  (659, 'bestkid', '乌梅汁', '4', '2026-05-03 01:40:29.178466', NULL),
+  (698, 'bestkid', '招牌锅贴', '5', '2026-05-03 02:09:24.105695', NULL),
+  (699, 'bestkid', '韭菜锅贴', '5', '2026-05-03 02:09:29.796782', NULL),
+  (700, 'bestkid', '韩式辣味锅贴', '5', '2026-05-03 02:09:36.770478', NULL),
+  (701, 'bestkid', '咖喱锅贴', '5', '2026-05-03 02:09:50.266152', NULL),
+  (702, 'bestkid', '玉米锅贴', '5', '2026-05-03 02:09:54.296623', NULL),
+  (703, 'bestkid', '田园蔬菜锅贴', '5', '2026-05-03 02:10:09.749614', NULL),
+  (704, 'bestkid', '鲜虾锅贴', '5', '2026-05-03 02:10:19.777763', NULL),
+  (705, 'bestkid', '招牌水饺', '5', '2026-05-03 02:10:25.542481', NULL),
+  (706, 'bestkid', '韭菜水饺', '5', '2026-05-03 02:10:27.536013', NULL),
+  (707, 'bestkid', '韩式辣味水饺', '5', '2026-05-03 02:10:36.020554', NULL),
+  (708, 'bestkid', '玉米水饺', '5', '2026-05-03 02:10:38.122424', NULL)
+ON CONFLICT (id) DO NOTHING;
 SELECT setval('mastered_cards_id_seq', (SELECT MAX(id) FROM mastered_cards));
 
--- 7. COMPLETED LESSONS
-INSERT INTO completed_lessons (id, username, unit_numbers, time_ms, completed_at) VALUES (undefined, '', NULL, NULL, 'undefined') ON CONFLICT (id) DO NOTHING;
-INSERT INTO completed_lessons (id, username, unit_numbers, time_ms, completed_at) VALUES (undefined, '', NULL, NULL, 'undefined') ON CONFLICT (id) DO NOTHING;
+-- 7. COMPLETED LESSONS (4 rows)
+INSERT INTO completed_lessons (id, kid, unit_number, unit_name, completed_at, user_id, time_ms) VALUES
+  (1, 'bestkid', '1', 'Basic Food', '2026-05-03 01:32:00.571409', NULL, 5400),
+  (5, 'bestkid', '2', 'Breakfast Shop Menu', '2026-05-03 00:26:45.148319', NULL, 6500),
+  (6, 'bestkid', '3', 'Breakfast Shop Menu', '2026-05-03 00:06:50.498787', NULL, 3768),
+  (11, 'bestkid', '5', 'Dumpling & Noodle Shop', '2026-05-03 01:46:25.883901', NULL, NULL)
+ON CONFLICT (id) DO NOTHING;
 SELECT setval('completed_lessons_id_seq', (SELECT MAX(id) FROM completed_lessons));
