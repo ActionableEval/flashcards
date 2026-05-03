@@ -185,7 +185,7 @@ export default function Dashboard({
         total: unitCards.length,
         mastered,
         learning: unitCards.length - mastered,
-        completed: total > 0 && mastered === total,
+        completed: unitCards.length > 0 && mastered === unitCards.length,
         personal_best: completedInfo?.time_ms ?? null,
       };
     });
