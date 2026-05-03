@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { User, ArrowRight, Loader, Mail } from 'lucide-react';
 
 interface UserData {
@@ -14,13 +14,34 @@ interface Props {
 
 type Step = 'username' | 'verify-email' | 'add-email' | 'create';
 
+interface MathQuestion {
+  question: string;
+  answer: number;
+}
+
+function generateMathQuestion(): MathQuestion {
+  const a = Math.floor(Math.random() * 9) + 1;
+  const b = Math.floor(Math.random() * 9) + 1;
+  const useAdd = Math.random() > 0.4;
+  if (useAdd) {
+    return { question: `${a} + ${b}`, answer: a + b };
+  } else {
+    const big = Math.max(a, b);
+    const small = Math.min(a, b);
+    return { question: `${big} − ${small}`, answer: big - small };
+  }
+}
+
 export default function UserLogin({ onLogin }: Props) {
   const [step, setStep] = useState<Step>('username');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [captchaInput, setCaptchaInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const mathRef = useRef<MathQuestion>(generateMathQuestion());
 
   const trimmedUsername = username.trim().toLowerCase();
 
@@ -36,9 +57,10 @@ export default function UserLogin({ onLogin }: Props) {
       const res = await fetch(`/api/users/${trimmedUsername}`);
       if (res.ok) {
         const user = await res.json();
-        // Existing account — go to email verification or first-time email association
         setStep(user.has_email ? 'verify-email' : 'add-email');
       } else if (res.status === 404) {
+        mathRef.current = generateMathQuestion();
+        setCaptchaInput('');
         setStep('create');
       } else {
         setError('Something went wrong. Try again.');
@@ -50,7 +72,6 @@ export default function UserLogin({ onLogin }: Props) {
     }
   };
 
-  // Used for both 'verify-email' and 'add-email'
   const handleEmailVerify = async () => {
     const trimmedEmail = email.trim().toLowerCase();
     if (!trimmedEmail) { setError('Please enter your email'); return; }
@@ -67,10 +88,9 @@ export default function UserLogin({ onLogin }: Props) {
         body: JSON.stringify({ username: trimmedUsername, email: trimmedEmail }),
       });
       if (res.ok) {
-        const user = await res.json();
-        onLogin(user);
+        onLogin(await res.json());
       } else if (res.status === 401) {
-        setError('That email doesn\'t match this account. Try again.');
+        setError("That email doesn't match this account. Try again.");
       } else if (res.status === 409) {
         setError('That email is already linked to another account.');
       } else {
@@ -91,6 +111,13 @@ export default function UserLogin({ onLogin }: Props) {
       setError('Please enter a valid email address');
       return;
     }
+    const userAnswer = parseInt(captchaInput.trim(), 10);
+    if (isNaN(userAnswer) || userAnswer !== mathRef.current.answer) {
+      setError('Incorrect answer — please try the math question again.');
+      mathRef.current = generateMathQuestion();
+      setCaptchaInput('');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -100,8 +127,7 @@ export default function UserLogin({ onLogin }: Props) {
         body: JSON.stringify({ username: trimmedUsername, display_name: displayName.trim(), email: trimmedEmail }),
       });
       if (res.ok) {
-        const user = await res.json();
-        onLogin(user);
+        onLogin(await res.json());
       } else if (res.status === 409) {
         const data = await res.json();
         setError(data.error === 'Email already in use'
@@ -121,12 +147,13 @@ export default function UserLogin({ onLogin }: Props) {
     setStep('username');
     setEmail('');
     setDisplayName('');
+    setCaptchaInput('');
     setError('');
   };
 
   const stepSubtitle: Record<Step, string> = {
     'username': 'Enter your username to continue',
-    'verify-email': 'Enter your email to verify it\'s you',
+    'verify-email': "Enter your email to verify it's you",
     'add-email': 'Add your email to secure this account',
     'create': 'Create your account',
   };
@@ -143,6 +170,7 @@ export default function UserLogin({ onLogin }: Props) {
         </div>
 
         <div className="bg-white rounded-2xl shadow-lg p-6 space-y-4">
+
           {/* Step 1: Username */}
           {step === 'username' && (
             <>
@@ -276,10 +304,27 @@ export default function UserLogin({ onLogin }: Props) {
                 </div>
                 <p className="text-xs text-slate-400 mt-1">Secures your username — only you can sign in</p>
               </div>
+
+              {/* Math CAPTCHA */}
+              <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3 space-y-2">
+                <p className="text-xs font-medium text-indigo-600 uppercase tracking-wide">Quick check — are you human?</p>
+                <div className="flex items-center gap-3">
+                  <span className="text-xl font-bold text-slate-800 font-mono">{mathRef.current.question} = ?</span>
+                  <input
+                    type="number"
+                    value={captchaInput}
+                    onChange={e => { setCaptchaInput(e.target.value); setError(''); }}
+                    onKeyDown={e => e.key === 'Enter' && !loading && handleCreate()}
+                    placeholder="?"
+                    className="w-20 px-3 py-2 border border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-400 outline-none text-slate-800 text-center font-bold text-lg"
+                  />
+                </div>
+              </div>
+
               {error && <p className="text-red-500 text-sm">{error}</p>}
               <button
                 onClick={handleCreate}
-                disabled={loading || !displayName.trim() || !email.trim()}
+                disabled={loading || !displayName.trim() || !email.trim() || !captchaInput.trim()}
                 className="w-full bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 disabled:opacity-50 text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all"
               >
                 {loading ? <Loader className="w-4 h-4 animate-spin" /> : <><ArrowRight className="w-4 h-4" /> Create Account</>}
