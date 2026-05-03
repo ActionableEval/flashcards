@@ -56,7 +56,10 @@ const ChineseFoodFlashcards = () => {
   // Speech recognition
   const [isListening, setIsListening] = useState(false);
   const [speechFeedback, setSpeechFeedback] = useState<'correct' | 'wrong' | null>(null);
+  const [speakModeActive, setSpeakModeActive] = useState(false);
+  const speakModeRef = useRef(false);
   const recognitionRef = useRef<any>(null);
+  const listenCallbackRef = useRef<(() => void) | null>(null);
 
 
   // Timed game state
@@ -448,7 +451,6 @@ const ChineseFoodFlashcards = () => {
   const playSuccessSound = () => {
     try {
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      // Play two ascending notes: a quick bright "ding ding"
       const notes = [880, 1320];
       notes.forEach((freq, i) => {
         const osc = ctx.createOscillator();
@@ -467,23 +469,18 @@ const ChineseFoodFlashcards = () => {
     } catch {}
   };
 
-  // ─── Speech recognition ───────────────────────────────────────────
-  const handleMicClick = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setError('Speech recognition not supported — please use Chrome or Edge (not Safari/Firefox).');
-      setTimeout(() => setError(''), 5000);
-      return;
-    }
-    if (isListening) {
-      recognitionRef.current?.stop();
-      setIsListening(false);
-      return;
-    }
-    const current = cards[currentCard];
-    if (!current) return;
+  // ─── Speech recognition core ──────────────────────────────────────
+  // listenCallbackRef always holds a fresh closure so onend never has stale state
+  listenCallbackRef.current = () => {
+    if (!speakModeRef.current || isListening || cards.length === 0) return;
+    startSingleListen(cards[currentCard]);
+  };
 
-    const recognition = new SpeechRecognition();
+  const startSingleListen = (current: any) => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR || !current) return;
+
+    const recognition = new SR();
     recognitionRef.current = recognition;
     recognition.lang = 'zh-TW';
     recognition.interimResults = false;
@@ -491,25 +488,26 @@ const ChineseFoodFlashcards = () => {
     recognition.continuous = false;
 
     recognition.onstart = () => {
-      console.log('[Speech] Started listening for:', current.simplified);
+      console.log('[Speech] Listening for:', current.simplified);
       setIsListening(true);
     };
 
     recognition.onend = () => {
-      console.log('[Speech] Ended');
       setIsListening(false);
+      // In auto mode, restart for next card (card may have changed by now)
+      if (speakModeRef.current) {
+        setTimeout(() => listenCallbackRef.current?.(), 600);
+      }
     };
 
     recognition.onresult = (event: any) => {
       const alternatives = Array.from(event.results[0]) as any[];
       const transcripts = alternatives.map((r: any) => r.transcript.trim());
       const bestHeard = transcripts[0] || '';
-      console.log('[Speech] Heard alternatives:', transcripts);
-      console.log('[Speech] Expected:', current.simplified, '/', current.traditional);
+      console.log('[Speech] Heard:', transcripts, '| Expected:', current.simplified);
 
       const simplified = current.simplified.trim();
       const traditional = current.traditional.trim();
-
       const matched = transcripts.some(t => {
         if (!t) return false;
         return t === simplified || t === traditional ||
@@ -523,10 +521,12 @@ const ChineseFoodFlashcards = () => {
         setSpeechFeedback('correct');
         setTimeout(() => setSpeechFeedback(null), 1500);
         setTimeout(() => handleMarkAsMastered(), 400);
+        // onend will restart for the new card after the transition
       } else {
         setSpeechFeedback('wrong');
         setError(`Heard: "${bestHeard}" — expected: "${simplified}" (${current.pinyin})`);
-        setTimeout(() => { setSpeechFeedback(null); setError(''); }, 4000);
+        setTimeout(() => { setSpeechFeedback(null); setError(''); }, 3000);
+        // onend will restart for the same card
       }
     };
 
@@ -534,24 +534,50 @@ const ChineseFoodFlashcards = () => {
       console.log('[Speech] Error:', event.error);
       setIsListening(false);
       const messages: Record<string, string> = {
-        'not-allowed': 'Microphone access denied — please allow mic permission in your browser, and open the app in a full tab (not the embedded preview).',
-        'no-speech': 'No speech detected — try speaking louder or closer to the mic.',
+        'not-allowed': 'Microphone access denied — open the app in a full browser tab and allow mic permission.',
+        'no-speech': '',
         'network': 'Network error — speech recognition needs an internet connection.',
         'aborted': '',
       };
       const msg = messages[event.error] ?? `Mic error: ${event.error}`;
-      if (msg) {
-        setError(msg);
-        setTimeout(() => setError(''), 5000);
-      }
+      if (msg) { setError(msg); setTimeout(() => setError(''), 5000); }
+      // onend fires after onerror, which will restart if in auto mode
     };
 
-    try {
-      recognition.start();
-    } catch (e: any) {
+    try { recognition.start(); } catch (e: any) {
       console.error('[Speech] Start error:', e);
       setError(`Could not start mic: ${e.message}`);
       setTimeout(() => setError(''), 5000);
+    }
+  };
+
+  const handleMicClick = () => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      setError('Speech recognition not supported — please use Chrome or Edge.');
+      setTimeout(() => setError(''), 5000);
+      return;
+    }
+    if (isListening) { recognitionRef.current?.stop(); return; }
+    startSingleListen(cards[currentCard]);
+  };
+
+  const toggleSpeakMode = () => {
+    if (speakModeActive) {
+      speakModeRef.current = false;
+      setSpeakModeActive(false);
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    } else {
+      const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SR) {
+        setError('Speech recognition not supported — please use Chrome or Edge.');
+        setTimeout(() => setError(''), 5000);
+        return;
+      }
+      speakModeRef.current = true;
+      setSpeakModeActive(true);
+      startSingleListen(cards[currentCard]);
     }
   };
 
@@ -918,19 +944,38 @@ const ChineseFoodFlashcards = () => {
           </button>
           <button
             onClick={handleMicClick}
-            disabled={cards.length === 0}
+            disabled={cards.length === 0 || speakModeActive}
             className={`relative disabled:opacity-50 text-white px-5 py-2.5 rounded-xl font-medium shadow-md flex items-center gap-2 text-sm transition-all ${
-              isListening
+              isListening && !speakModeActive
                 ? 'bg-red-500 hover:bg-red-600 animate-pulse'
-                : speechFeedback === 'correct'
+                : speechFeedback === 'correct' && !speakModeActive
                 ? 'bg-emerald-500'
-                : speechFeedback === 'wrong'
+                : speechFeedback === 'wrong' && !speakModeActive
                 ? 'bg-rose-600'
                 : 'bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700'
             }`}
           >
-            {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-            {isListening ? 'Listening…' : speechFeedback === 'correct' ? '✓ Correct!' : speechFeedback === 'wrong' ? '✗ Try again' : 'Speak'}
+            <Mic className="w-4 h-4" /> Speak
+          </button>
+          <button
+            onClick={toggleSpeakMode}
+            disabled={cards.length === 0}
+            className={`relative disabled:opacity-50 text-white px-5 py-2.5 rounded-xl font-medium shadow-md flex items-center gap-2 text-sm transition-all ${
+              speakModeActive
+                ? isListening
+                  ? 'bg-red-500 animate-pulse'
+                  : speechFeedback === 'correct'
+                  ? 'bg-emerald-500'
+                  : speechFeedback === 'wrong'
+                  ? 'bg-rose-600'
+                  : 'bg-red-400 hover:bg-red-500'
+                : 'bg-gradient-to-r from-violet-700 to-purple-800 hover:from-violet-800 hover:to-purple-900'
+            }`}
+          >
+            {speakModeActive ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            {speakModeActive
+              ? isListening ? 'Listening…' : speechFeedback === 'correct' ? '✓ Correct!' : speechFeedback === 'wrong' ? '✗ Try again' : 'Auto ON'
+              : 'Auto'}
           </button>
         </div>
 
