@@ -149,6 +149,17 @@ const ChineseFoodFlashcards = () => {
     return () => { cancelled = true; };
   }, []);
 
+  // ─── Restore teams for persisted session ──────────────────────────
+  useEffect(() => {
+    if (!savedUser) return;
+    loadProgress(savedUser.username);
+    fetch(`/api/users/${savedUser.id}/teams`)
+      .then(r => r.json())
+      .then(teams => setUserTeams(Array.isArray(teams) ? teams.filter((t: any) => t.status === 'approved') : []))
+      .catch(() => setUserTeams([]));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ─── Database API helpers ─────────────────────────────────────────
   const loadProgress = async (username: string) => {
     try {
