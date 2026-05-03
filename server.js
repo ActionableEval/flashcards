@@ -16,7 +16,11 @@ app.use(express.json());
 // Serve uploaded avatars statically
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// Use Supabase DB in production (Render), fall back to Replit local DB in dev
+const pool = new Pool({
+  connectionString: process.env.SUPABASE_DATABASE_URL || process.env.DATABASE_URL,
+  ssl: process.env.SUPABASE_DATABASE_URL ? { rejectUnauthorized: false } : false,
+});
 
 // ─── Multer setup ─────────────────────────────────────────────────
 const avatarStorage = multer.diskStorage({
