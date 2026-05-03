@@ -448,7 +448,8 @@ const ChineseFoodFlashcards = () => {
   const handleMicClick = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      setError('Speech recognition is not supported in this browser. Try Chrome or Edge.');
+      setError('Speech recognition not supported — please use Chrome or Edge (not Safari/Firefox).');
+      setTimeout(() => setError(''), 5000);
       return;
     }
     if (isListening) {
@@ -463,22 +464,35 @@ const ChineseFoodFlashcards = () => {
     recognitionRef.current = recognition;
     recognition.lang = 'zh-TW';
     recognition.interimResults = false;
-    recognition.maxAlternatives = 5;
+    recognition.maxAlternatives = 8;
+    recognition.continuous = false;
 
-    recognition.onstart = () => setIsListening(true);
-    recognition.onend = () => setIsListening(false);
+    recognition.onstart = () => {
+      console.log('[Speech] Started listening for:', current.simplified);
+      setIsListening(true);
+    };
+
+    recognition.onend = () => {
+      console.log('[Speech] Ended');
+      setIsListening(false);
+    };
 
     recognition.onresult = (event: any) => {
-      const results = Array.from(event.results[0]) as any[];
-      const heard = results.map((r: any) => r.transcript.trim()).join('');
+      const alternatives = Array.from(event.results[0]) as any[];
+      const transcripts = alternatives.map((r: any) => r.transcript.trim());
+      const bestHeard = transcripts[0] || '';
+      console.log('[Speech] Heard alternatives:', transcripts);
+      console.log('[Speech] Expected:', current.simplified, '/', current.traditional);
 
       const simplified = current.simplified.trim();
       const traditional = current.traditional.trim();
-      const matched = results.some((r: any) => {
-        const t = r.transcript.trim();
+
+      const matched = transcripts.some(t => {
+        if (!t) return false;
         return t === simplified || t === traditional ||
                t.includes(simplified) || t.includes(traditional) ||
-               simplified.includes(t) || traditional.includes(t);
+               (simplified.length > 1 && simplified.includes(t)) ||
+               (traditional.length > 1 && traditional.includes(t));
       });
 
       if (matched) {
@@ -487,20 +501,34 @@ const ChineseFoodFlashcards = () => {
         setTimeout(() => handleMarkAsMastered(), 400);
       } else {
         setSpeechFeedback('wrong');
-        setError(`Heard: "${heard}" — expected: "${simplified}" (${current.pinyin})`);
-        setTimeout(() => { setSpeechFeedback(null); setError(''); }, 3000);
+        setError(`Heard: "${bestHeard}" — expected: "${simplified}" (${current.pinyin})`);
+        setTimeout(() => { setSpeechFeedback(null); setError(''); }, 4000);
       }
     };
 
     recognition.onerror = (event: any) => {
+      console.log('[Speech] Error:', event.error);
       setIsListening(false);
-      if (event.error !== 'no-speech' && event.error !== 'aborted') {
-        setError(`Mic error: ${event.error}`);
-        setTimeout(() => setError(''), 3000);
+      const messages: Record<string, string> = {
+        'not-allowed': 'Microphone access denied — please allow mic permission in your browser, and open the app in a full tab (not the embedded preview).',
+        'no-speech': 'No speech detected — try speaking louder or closer to the mic.',
+        'network': 'Network error — speech recognition needs an internet connection.',
+        'aborted': '',
+      };
+      const msg = messages[event.error] ?? `Mic error: ${event.error}`;
+      if (msg) {
+        setError(msg);
+        setTimeout(() => setError(''), 5000);
       }
     };
 
-    recognition.start();
+    try {
+      recognition.start();
+    } catch (e: any) {
+      console.error('[Speech] Start error:', e);
+      setError(`Could not start mic: ${e.message}`);
+      setTimeout(() => setError(''), 5000);
+    }
   };
 
   // ─── Unit selection applies immediately ───────────────────────────
