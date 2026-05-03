@@ -511,12 +511,19 @@ const ChineseFoodFlashcards = () => {
       const traditional = current.traditional.trim();
       setLastHeard(bestHeard);
 
-      // Stricter matching for short words (1–2 chars): exact match only
-      // Looser matching for longer words: allow substring
-      const isShortWord = simplified.length <= 2;
+      // Matching strategy by word length:
+      // - 1 char: allow if recognized text contains target AND is ≤3 chars
+      //   (recognizer often doubles single chars e.g. "水"→"水水", or adds context "茶"→"绿茶")
+      // - 2 chars: exact match only (2-char words recognize reliably)
+      // - 3+ chars: allow substring in either direction
+      const len = simplified.length;
       const matched = transcripts.some(t => {
         if (!t) return false;
-        if (isShortWord) {
+        if (len === 1) {
+          // accept if t contains the character and t is short (≤3 chars)
+          return (t.includes(simplified) || t.includes(traditional)) && t.length <= 3;
+        }
+        if (len === 2) {
           return t === simplified || t === traditional;
         }
         return t === simplified || t === traditional ||
