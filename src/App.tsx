@@ -57,6 +57,7 @@ const ChineseFoodFlashcards = () => {
   const [isListening, setIsListening] = useState(false);
   const [speechFeedback, setSpeechFeedback] = useState<'correct' | 'wrong' | null>(null);
   const [speakModeActive, setSpeakModeActive] = useState(false);
+  const [lastHeard, setLastHeard] = useState('');
   const speakModeRef = useRef(false);
   const recognitionRef = useRef<any>(null);
   const listenCallbackRef = useRef<(() => void) | null>(null);
@@ -508,25 +509,29 @@ const ChineseFoodFlashcards = () => {
 
       const simplified = current.simplified.trim();
       const traditional = current.traditional.trim();
+      setLastHeard(bestHeard);
+
+      // Stricter matching for short words (1–2 chars): exact match only
+      // Looser matching for longer words: allow substring
+      const isShortWord = simplified.length <= 2;
       const matched = transcripts.some(t => {
         if (!t) return false;
+        if (isShortWord) {
+          return t === simplified || t === traditional;
+        }
         return t === simplified || t === traditional ||
                t.includes(simplified) || t.includes(traditional) ||
-               (simplified.length > 1 && simplified.includes(t)) ||
-               (traditional.length > 1 && traditional.includes(t));
+               simplified.includes(t) || traditional.includes(t);
       });
 
       if (matched) {
         playSuccessSound();
         setSpeechFeedback('correct');
-        setTimeout(() => setSpeechFeedback(null), 1500);
+        setTimeout(() => { setSpeechFeedback(null); setLastHeard(''); }, 1800);
         setTimeout(() => handleMarkAsMastered(), 400);
-        // onend will restart for the new card after the transition
       } else {
         setSpeechFeedback('wrong');
-        setError(`Heard: "${bestHeard}" — expected: "${simplified}" (${current.pinyin})`);
-        setTimeout(() => { setSpeechFeedback(null); setError(''); }, 3000);
-        // onend will restart for the same card
+        setTimeout(() => { setSpeechFeedback(null); setLastHeard(''); }, 3000);
       }
     };
 
@@ -952,6 +957,22 @@ const ChineseFoodFlashcards = () => {
               : 'Auto'}
           </button>
         </div>
+
+        {/* Speech heard feedback */}
+        {lastHeard && (
+          <div className={`max-w-md mx-auto mb-3 flex items-center justify-center gap-3 p-3 rounded-xl text-sm font-medium border ${
+            speechFeedback === 'correct'
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              : speechFeedback === 'wrong'
+              ? 'bg-rose-50 text-rose-700 border-rose-200'
+              : 'bg-violet-50 text-violet-700 border-violet-200'
+          }`}>
+            <span className="text-xs text-gray-400 font-normal">Heard:</span>
+            <span className="text-lg tracking-wide">{lastHeard}</span>
+            {speechFeedback === 'correct' && <span className="text-emerald-500 text-base">✓</span>}
+            {speechFeedback === 'wrong' && <span className="text-rose-500 text-base">✗</span>}
+          </div>
+        )}
 
         {/* Notification */}
         {error && (
