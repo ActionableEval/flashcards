@@ -52,8 +52,6 @@ const ChineseFoodFlashcards = () => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
 
-  // Track study session start time for non-game completions
-  const lessonStartTimeRef = useRef<number | null>(null);
 
   // Timed game state
   const [isGameMode, setIsGameMode] = useState(false);
@@ -207,7 +205,6 @@ const ChineseFoodFlashcards = () => {
     setGameOrder([]);
     setFinalTimeMs(null);
     setLessonJustCompleted(false);
-    lessonStartTimeRef.current = Date.now();
     setScreen('app');
   };
 
@@ -336,8 +333,13 @@ const ChineseFoodFlashcards = () => {
 
   // ─── Timed game ───────────────────────────────────────────────────
   const startTimedGame = () => {
-    if (cards.length === 0 || isGameMode || countdown > 0) return;
-    const order = cards.map((_, i) => i).sort(() => Math.random() - 0.5);
+    if (isGameMode || countdown > 0) return;
+    const unitCards = selectedUnit
+      ? allCards.filter(c => String(c.unitNumber) === String(selectedUnit))
+      : allCards;
+    if (unitCards.length === 0) return;
+    const order = unitCards.map((_, i) => i).sort(() => Math.random() - 0.5);
+    setCards(unitCards);
     setGameOrder(order);
     setGamePosition(0);
     setShowAnswer(false);
@@ -364,6 +366,18 @@ const ChineseFoodFlashcards = () => {
     setIsGameMode(false);
     if (timerId) { clearInterval(timerId); setTimerId(null); }
     setFinalTimeMs(finalMs);
+    // Save timed result to DB
+    if (currentUser && selectedUnit) {
+      const unitCards = allCards.filter(c => String(c.unitNumber) === String(selectedUnit));
+      const unitName = unitCards[0]?.unitName || `Unit ${selectedUnit}`;
+      saveCompletedLesson(currentUser.username, String(selectedUnit), unitName, finalMs);
+    }
+    // Restore unmastered cards for regular study
+    const restorePool = selectedUnit
+      ? allCards.filter(c => String(c.unitNumber) === String(selectedUnit))
+      : allCards;
+    const unmastered = restorePool.filter(c => !masteredKeys.includes(c.simplified));
+    setCards(unmastered.length > 0 ? unmastered : restorePool);
     try {
       const key = `timedLeaderboard:${currentUser?.username}:unit:${selectedUnit || 'all'}`;
       const raw = localStorage.getItem(key);
@@ -409,8 +423,7 @@ const ChineseFoodFlashcards = () => {
         if (currentUser && selectedUnit) {
           const unitCards = allCards.filter(c => String(c.unitNumber) === String(selectedUnit));
           const unitName = unitCards[0]?.unitName || `Unit ${selectedUnit}`;
-          const elapsed = lessonStartTimeRef.current ? Date.now() - lessonStartTimeRef.current : undefined;
-          saveCompletedLesson(currentUser.username, String(selectedUnit), unitName, elapsed);
+          saveCompletedLesson(currentUser.username, String(selectedUnit), unitName);
         }
         return;
       }
