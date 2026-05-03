@@ -64,7 +64,7 @@ interface Props {
   user: UserData;
   userTeams: Team[];
   allCards: Card[];
-  onStartLesson: (units: string[], label: string) => void;
+  onStartLesson: (units: string[], label: string, studyAll?: boolean) => void;
   onEditProfile: () => void;
   onManageTeam: (team: Team) => void;
   onTeamsChange: (teams: Team[]) => void;
@@ -220,6 +220,20 @@ export default function Dashboard({
       return next;
     });
   };
+
+  const allSelected = units.length > 0 && selectedUnits.size === units.length;
+  const someSelected = selectedUnits.size > 0 && !allSelected;
+
+  const toggleSelectAll = () => {
+    if (allSelected || someSelected) {
+      setSelectedUnits(new Set());
+    } else {
+      setSelectedUnits(new Set(units.map(u => u.unit_number)));
+    }
+  };
+
+  const studyUnits = selectedUnits.size > 0 ? [...selectedUnits] : [];
+  const studyLabel = selectedUnits.size > 0 ? `${selectedUnits.size} unit(s)` : 'All Units';
 
   const termsModalCards = useMemo(() =>
     termsLesson ? allCards.filter(c => String(c.unitNumber) === termsLesson) : [],
@@ -592,16 +606,14 @@ export default function Dashboard({
               {loading && <span className="text-xs text-slate-400 font-normal animate-pulse">Loading…</span>}
             </h2>
             <div className="flex gap-2 flex-wrap">
-              {selectedUnits.size > 0 && (
-                <button
-                  onClick={() => onStartLesson([...selectedUnits], `${selectedUnits.size} lessons`)}
-                  className="flex items-center gap-1.5 bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-2 rounded-xl text-sm font-medium shadow-sm"
-                >
-                  <Play className="w-3.5 h-3.5" /> Study Selected ({selectedUnits.size})
-                </button>
-              )}
               <button
-                onClick={() => onStartLesson([], 'All Lessons')}
+                onClick={() => onStartLesson(studyUnits, studyLabel, false)}
+                className="flex items-center gap-1.5 bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-2 rounded-xl text-sm font-medium shadow-sm"
+              >
+                <Play className="w-3.5 h-3.5" /> Study Unlearned
+              </button>
+              <button
+                onClick={() => onStartLesson(studyUnits, studyLabel, true)}
                 className="flex items-center gap-1.5 bg-rose-500 hover:bg-rose-600 text-white px-3 py-2 rounded-xl text-sm font-medium shadow-sm"
               >
                 <Play className="w-3.5 h-3.5" /> Study All
@@ -610,6 +622,26 @@ export default function Dashboard({
           </div>
 
           <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            {/* Select All row */}
+            {lessonStats.length > 0 && (
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 bg-slate-50/70">
+                <button onClick={toggleSelectAll} className="flex-shrink-0">
+                  <div className={`w-[18px] h-[18px] rounded flex items-center justify-center border-2 transition-colors ${
+                    allSelected ? 'bg-indigo-500 border-indigo-500' :
+                    someSelected ? 'bg-indigo-100 border-indigo-400' :
+                    'border-slate-300 hover:border-indigo-400 bg-white'
+                  }`}>
+                    {allSelected && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+                    {someSelected && <div className="w-2 h-0.5 bg-indigo-500 rounded" />}
+                  </div>
+                </button>
+                <span className="text-sm font-medium text-slate-600">Select all units</span>
+                {selectedUnits.size > 0 && (
+                  <span className="text-xs text-indigo-500 font-medium">{selectedUnits.size} of {units.length} selected</span>
+                )}
+              </div>
+            )}
+
             {lessonStats.length === 0 && !loading ? (
               <div className="px-4 py-12 text-center text-slate-400 text-sm">
                 Cards are loading — please wait a moment.

@@ -189,14 +189,13 @@ const ChineseFoodFlashcards = () => {
     setScreen('dashboard');
   };
 
-  const handleStartLesson = (units: string[], _label?: string) => {
+  const handleStartLesson = (units: string[], _label?: string, studyAll = false) => {
     const byUnit = units.length === 0
       ? allCards
       : units.length === 1
         ? allCards.filter(c => String(c.unitNumber) === String(units[0]))
         : allCards.filter(c => units.map(String).includes(String(c.unitNumber)));
-    // Start with only unmastered cards so the user isn't re-reviewing what they already know
-    const filtered = byUnit.filter(c => !masteredKeys.includes(c.simplified));
+    const filtered = studyAll ? byUnit : byUnit.filter(c => !masteredKeys.includes(c.simplified));
     setSelectedUnit(units.length === 1 ? units[0] : '');
     setCards(filtered.length > 0 ? filtered : byUnit);
     setCurrentCard(0);
