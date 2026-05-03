@@ -39,7 +39,7 @@ const ChineseFoodFlashcards = () => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [newWord, setNewWord] = useState('');
-  const [editingCard, setEditingCard] = useState(null);
+  const [editingCard, setEditingCard] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [showLinkModal, setShowLinkModal] = useState(false);
@@ -68,11 +68,11 @@ const ChineseFoodFlashcards = () => {
   // Timed game state
   const [isGameMode, setIsGameMode] = useState(false);
   const [countdown, setCountdown] = useState(0);
-  const [gameOrder, setGameOrder] = useState([]);
-  const [gamePosition, setGamePosition] = useState(0);
+  const [gameOrder, setGameOrder] = useState<number[]>([]);
+  const [gamePosition, setGamePosition] = useState<number>(0);
   const [elapsedMs, setElapsedMs] = useState(0);
-  const [timerId, setTimerId] = useState(null);
-  const [finalTimeMs, setFinalTimeMs] = useState(null);
+  const [timerId, setTimerId] = useState<number | null>(null);
+  const [finalTimeMs, setFinalTimeMs] = useState<number | null>(null);
 
   // Cards
   const [allCards, setAllCards] = useState<any[]>([]);
